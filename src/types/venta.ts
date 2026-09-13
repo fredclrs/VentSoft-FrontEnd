@@ -31,6 +31,9 @@ export interface Venta {
   idCliente: number
   idUsuario: number
   idPromocion?: number | null
+  /** Cómo se cobró lo de "pagado" (Efectivo, Tarjeta, QR, etc.). Null en ventas 100% a crédito
+   * o de antes de este campo. */
+  idFormaDePago?: number | null
   detalles: DetalleVenta[]
 }
 
@@ -53,5 +56,7 @@ export interface RegistrarVenta {
   idPromocion?: number
   pagado: number
   montoSaldoAFavorAplicado?: number
+  /** Cómo se cobró lo de "pagado" — opcional, no tiene sentido si pagado es 0. */
+  idFormaDePago?: number
   detalles: RegistrarDetalleVenta[]
 }

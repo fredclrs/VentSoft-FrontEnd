@@ -33,6 +33,7 @@ import type { ModoVentaCompra } from '../utils/fraccion'
 import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import { buscarClientesTexto } from '../api/clientes'
 import { articulosApi, buscarArticulos, getStockTodos } from '../api/articulos'
+import { formasDePagoApi } from '../api/formasDePago'
 import { registrarVenta } from '../api/ventas'
 import { useAuth } from '../auth/AuthContext'
 import { getErrorMessage } from '../api/errors'
@@ -73,6 +74,7 @@ export function VentasPage() {
   const [referencias, setReferencias] = useState('')
   const [nota, setNota] = useState('')
   const [pagado, setPagado] = useState('0')
+  const [idFormaDePago, setIdFormaDePago] = useState<number | ''>('')
   const [montoSaldoAFavor, setMontoSaldoAFavor] = useState('0')
   const [recibido, setRecibido] = useState('')
   const [contado, setContado] = useState(false)
@@ -89,6 +91,8 @@ export function VentasPage() {
 
   // Solo para resolver código/descripción al agregar por escaneo; no es historial.
   const articulosQuery = useQuery({ queryKey: ['articulos'], queryFn: () => articulosApi.search() })
+
+  const formasDePagoQuery = useQuery({ queryKey: ['formasDePago'], queryFn: () => formasDePagoApi.search() })
 
   // Stock de todo el catálogo, para poder mostrar "sin stock" y bloquear el agregado antes de
   // llegar a registrar la venta (el backend igual lo vuelve a validar al confirmar).
@@ -216,6 +220,7 @@ export function VentasPage() {
     setReferencias('')
     setNota('')
     setPagado('0')
+    setIdFormaDePago('')
     setMontoSaldoAFavor('0')
     setRecibido('')
     setLineas([])
@@ -247,6 +252,7 @@ export function VentasPage() {
         idCliente: cliente.id,
         idUsuario: usuario.id,
         pagado: Number(pagado) || 0,
+        idFormaDePago: idFormaDePago || undefined,
         montoSaldoAFavorAplicado: Number(montoSaldoAFavor) || 0,
         detalles,
       })
@@ -357,7 +363,7 @@ export function VentasPage() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: mostrarRecibido ? '2fr 1fr 1fr 1fr 1fr' : '2fr 1fr 1fr 1fr' },
+          gridTemplateColumns: { xs: '1fr', sm: mostrarRecibido ? '2fr 1fr 1fr 1fr 1fr 1fr' : '2fr 1fr 1fr 1fr' },
           gap: 1.5,
         }}
       >
@@ -398,6 +404,23 @@ export function VentasPage() {
           onChange={(e) => setPagado(e.target.value)}
           helperText={contadoEfectivo ? 'Se carga solo (contado)' : '0 = venta a crédito'}
         />
+        {mostrarRecibido && (
+          <TextField
+            select
+            label="Forma de pago"
+            size="small"
+            fullWidth
+            value={idFormaDePago}
+            onChange={(e) => setIdFormaDePago(e.target.value ? Number(e.target.value) : '')}
+          >
+            <MenuItem value="">Sin especificar</MenuItem>
+            {(formasDePagoQuery.data ?? []).map((f) => (
+              <MenuItem key={f.id} value={f.id}>
+                {f.nombre}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
         {mostrarRecibido && (
           <TextField
             label="Recibido"

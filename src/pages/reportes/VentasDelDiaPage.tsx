@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
@@ -32,6 +32,7 @@ import IconButton from '@mui/material/IconButton'
 import { articulosApi, buscarArticulos } from '../../api/articulos'
 import { familiasApi } from '../../api/familias'
 import { usuariosApi } from '../../api/usuarios'
+import { formasDePagoApi } from '../../api/formasDePago'
 import { buscarClientes } from '../../api/clientes'
 import { getVentasDelDia } from '../../api/ventas'
 import { getDevolucionesDelDia } from '../../api/devoluciones'
@@ -109,6 +110,22 @@ export function VentasDelDiaPage() {
   const familiaPorId = useMemo(
     () => new Map((familiasQuery.data ?? []).map((f) => [f.id, f])),
     [familiasQuery.data],
+  )
+
+  const formasDePagoQuery = useQuery({ queryKey: ['formasDePago'], queryFn: () => formasDePagoApi.search() })
+  const esEfectivoPorFormaDePago = useMemo(
+    () => new Map((formasDePagoQuery.data ?? []).map((f) => [f.id, f.esEfectivo])),
+    [formasDePagoQuery.data],
+  )
+
+  // Sin forma de pago especificada (ventas de antes de este campo, o el cajero no la cargó):
+  // se asume efectivo, como se comportaba todo el sistema antes de que existiera esto.
+  const esVentaEnEfectivo = useCallback(
+    (venta: Venta): boolean => {
+      if (venta.idFormaDePago == null) return true
+      return esEfectivoPorFormaDePago.get(venta.idFormaDePago) ?? true
+    },
+    [esEfectivoPorFormaDePago],
   )
 
   // Devoluciones/cambios del día: también mueven efectivo de la caja (se devuelve plata, o se
@@ -219,11 +236,14 @@ export function VentasDelDiaPage() {
   // NO es lo mismo que "Total cobrado": ese incluye plata que en realidad no entró hoy (saldo a
   // favor aplicado, que ya se "cobró" el día de la devolución que lo generó) y no contempla las
   // devoluciones/cambios de HOY (también mueven efectivo) ni los movimientos de caja sueltos
-  // (sacar plata para comprar algo, un gasto, etc.).
+  // (sacar plata para comprar algo, un gasto, etc.). Tampoco cuenta lo cobrado por Tarjeta/QR/
+  // transferencia (ver esVentaEnEfectivo) — eso no es plata física, no debería estar en la caja.
   const efectivoEnCaja = useMemo(() => {
     let efectivo = 0
     for (const venta of ventasDelDia) {
-      efectivo += venta.pagado - venta.montoSaldoAFavorAplicado
+      if (esVentaEnEfectivo(venta)) {
+        efectivo += venta.pagado - venta.montoSaldoAFavorAplicado
+      }
     }
     for (const d of devolucionesQuery.data ?? []) {
       efectivo += d.montoCobradoAhora - d.montoDevueltoEfectivo
@@ -232,7 +252,19 @@ export function VentasDelDiaPage() {
       efectivo += m.tipo === 'ENTRADA' ? m.monto : -m.monto
     }
     return efectivo
-  }, [ventasDelDia, devolucionesQuery.data, movimientosCajaQuery.data])
+  }, [ventasDelDia, devolucionesQuery.data, movimientosCajaQuery.data, esVentaEnEfectivo])
+
+  // Lo cobrado hoy por Tarjeta/QR/transferencia (cualquier forma de pago marcada explícitamente
+  // como NO efectivo) — plata que no está en la caja física, pero sí entró al negocio.
+  const cobradoPorOtrosMedios = useMemo(() => {
+    let total = 0
+    for (const venta of ventasDelDia) {
+      if (!esVentaEnEfectivo(venta)) {
+        total += venta.pagado
+      }
+    }
+    return total
+  }, [ventasDelDia, esVentaEnEfectivo])
 
   const tarjetas: TarjetaResumen[] = [
     { label: 'Total vendido', valor: `${money(totales.totalVendido)}` },
@@ -329,6 +361,7 @@ export function VentasDelDiaPage() {
               valor: `${money(totales.gananciaBruta)}`,
             },
             { label: 'Efectivo que debería haber en la caja', valor: `${money(efectivoEnCaja)}` },
+            { label: 'Cobrado por Tarjeta/QR/otros', valor: `${money(cobradoPorOtrosMedios)}` },
           ],
     })
   }
@@ -446,21 +479,38 @@ export function VentasDelDiaPage() {
             ))}
           </Box>
 
-          <Paper variant="outlined" sx={{ p: 2, borderColor: 'primary.main', borderWidth: 2 }}>
-            <Typography variant="caption" color="text.secondary">
-              Efectivo que debería haber en la caja hoy
-            </Typography>
-            <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>
-              {money(efectivoEnCaja)}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-              Ventas cobradas en efectivo hoy, descontando saldo a favor usado y sumando/restando
-              lo que entró o salió por devoluciones/cambios y movimientos de caja de hoy. Pensado
-              para negocios que venden solo al contado — si además cobrás con tarjeta o
-              transferencia, este número no los distingue.
-            </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderColor: 'primary.main', borderWidth: 2 }}>
+              <Typography variant="caption" color="text.secondary">
+                Efectivo que debería haber en la caja hoy
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                {money(efectivoEnCaja)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Ventas cobradas en efectivo hoy (según la forma de pago marcada en cada una),
+                descontando saldo a favor usado y sumando/restando lo que entró o salió por
+                devoluciones/cambios y movimientos de caja de hoy. No incluye lo cobrado por
+                Tarjeta/QR/transferencia — eso está en el número de al lado.
+              </Typography>
+            </Paper>
 
-            <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mt: 1.5, mb: 0.5 }}>
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="caption" color="text.secondary">
+                Cobrado hoy por Tarjeta/QR/otros
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {money(cobradoPorOtrosMedios)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Plata que entró hoy pero no es física — no la cuenta el número de la caja. Sumá
+                los dos para saber el total realmente cobrado hoy.
+              </Typography>
+            </Paper>
+          </Box>
+
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
               <Typography variant="subtitle2">Movimientos de caja de hoy</Typography>
               <Button
                 size="small"

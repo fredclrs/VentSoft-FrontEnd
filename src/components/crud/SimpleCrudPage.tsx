@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
 import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import MenuItem from '@mui/material/MenuItem'
@@ -44,9 +46,11 @@ export interface CrudField {
   label: string
   required?: boolean
   multiline?: boolean
-  type?: 'text' | 'number' | 'select'
+  type?: 'text' | 'number' | 'select' | 'checkbox'
   /** Opciones cuando type === 'select'. */
   options?: { value: string; label: string }[]
+  /** Texto de ayuda debajo del control (checkbox u otro tipo). */
+  helperText?: string
 }
 
 export interface SimpleCrudPageProps<TDto extends { id: number }, TForm> {
@@ -250,27 +254,47 @@ export function SimpleCrudPage<TDto extends { id: number }, TForm>({
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {errorMutacion && <Alert severity="error">{errorMutacion}</Alert>}
-            {fields.map((f) => (
-              <TextField
-                key={f.key}
-                label={f.label}
-                required={f.required}
-                fullWidth
-                select={f.type === 'select'}
-                multiline={f.multiline}
-                minRows={f.multiline ? 2 : undefined}
-                type={f.type === 'number' ? 'number' : 'text'}
-                value={form[f.key] ?? ''}
-                onChange={(e) => actualizarCampo(f.key, e.target.value)}
-              >
-                {f.type === 'select' &&
-                  (f.options ?? []).map((o) => (
-                    <MenuItem key={o.value} value={o.value}>
-                      {o.label}
-                    </MenuItem>
-                  ))}
-              </TextField>
-            ))}
+            {fields.map((f) =>
+              f.type === 'checkbox' ? (
+                <div key={f.key}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form[f.key] === 'true'}
+                        onChange={(e) => actualizarCampo(f.key, e.target.checked ? 'true' : 'false')}
+                      />
+                    }
+                    label={f.label}
+                  />
+                  {f.helperText && (
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mt: -0.5 }}>
+                      {f.helperText}
+                    </Typography>
+                  )}
+                </div>
+              ) : (
+                <TextField
+                  key={f.key}
+                  label={f.label}
+                  required={f.required}
+                  fullWidth
+                  select={f.type === 'select'}
+                  multiline={f.multiline}
+                  minRows={f.multiline ? 2 : undefined}
+                  type={f.type === 'number' ? 'number' : 'text'}
+                  value={form[f.key] ?? ''}
+                  onChange={(e) => actualizarCampo(f.key, e.target.value)}
+                  helperText={f.helperText}
+                >
+                  {f.type === 'select' &&
+                    (f.options ?? []).map((o) => (
+                      <MenuItem key={o.value} value={o.value}>
+                        {o.label}
+                      </MenuItem>
+                    ))}
+                </TextField>
+              ),
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
