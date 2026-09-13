@@ -236,6 +236,7 @@ export function VentasPage() {
     mutationFn: () => {
       if (!cliente || !usuario) throw new Error('Falta seleccionar un cliente.')
       if (lineas.length === 0) throw new Error('Agregá al menos un artículo.')
+      if (mostrarRecibido && !idFormaDePago) throw new Error('Elegí una forma de pago.')
 
       // El backend siempre trabaja en unidades: acá se convierte lo cargado (paquetes o
       // unidades sueltas, según el modo de cada renglón) antes de mandarlo.
@@ -407,13 +408,15 @@ export function VentasPage() {
         {mostrarRecibido && (
           <TextField
             select
+            required
             label="Forma de pago"
             size="small"
             fullWidth
             value={idFormaDePago}
             onChange={(e) => setIdFormaDePago(e.target.value ? Number(e.target.value) : '')}
+            error={!idFormaDePago}
+            helperText={!idFormaDePago ? 'Elegí cómo se cobra' : undefined}
           >
-            <MenuItem value="">Sin especificar</MenuItem>
             {(formasDePagoQuery.data ?? []).map((f) => (
               <MenuItem key={f.id} value={f.id}>
                 {f.nombre}
@@ -714,7 +717,7 @@ export function VentasPage() {
           <Button
             variant="contained"
             size="large"
-            disabled={registrarMutation.isPending || !cliente || lineas.length === 0}
+            disabled={registrarMutation.isPending || !cliente || lineas.length === 0 || (mostrarRecibido && !idFormaDePago)}
             onClick={() => registrarMutation.mutate()}
           >
             {registrarMutation.isPending ? 'Registrando…' : 'Registrar venta'}
