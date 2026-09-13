@@ -8,6 +8,7 @@ import { ClientesPage } from './pages/ClientesPage'
 import { ProveedoresPage } from './pages/ProveedoresPage'
 import { UsuariosPage } from './pages/UsuariosPage'
 import { ArticulosPage } from './pages/ArticulosPage'
+import { AjusteStockPage } from './pages/AjusteStockPage'
 import { FamiliasPage } from './pages/FamiliasPage'
 import { CaracteristicasPage } from './pages/CaracteristicasPage'
 import { PromocionesPage } from './pages/PromocionesPage'
@@ -92,6 +93,7 @@ function App() {
 
           <Route element={<RequirePermiso permiso={PERMISO_INVENTARIO} />}>
             <Route path="articulos" element={<ArticulosPage />} />
+            <Route path="ajuste-stock" element={<AjusteStockPage />} />
             <Route path="familias" element={<FamiliasPage />} />
             <Route path="caracteristicas" element={<CaracteristicasPage />} />
             <Route path="promociones" element={<PromocionesPage />} />

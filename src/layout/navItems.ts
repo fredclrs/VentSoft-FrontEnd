@@ -4,6 +4,7 @@ import LocalShippingIcon from '@mui/icons-material/LocalShippingOutlined'
 import BadgeIcon from '@mui/icons-material/BadgeOutlined'
 import Inventory2Icon from '@mui/icons-material/Inventory2Outlined'
 import CategoryIcon from '@mui/icons-material/CategoryOutlined'
+import SyncAltIcon from '@mui/icons-material/SyncAltOutlined'
 import TuneIcon from '@mui/icons-material/TuneOutlined'
 import LocalOfferIcon from '@mui/icons-material/LocalOfferOutlined'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCartOutlined'
@@ -121,6 +122,7 @@ export const navModules: NavModule[] = [
     color: '#2e7d32',
     items: [
       { label: 'Artículos', path: '/articulos', icon: Inventory2Icon, permiso: PERMISO_INVENTARIO },
+      { label: 'Ajuste de stock', path: '/ajuste-stock', icon: SyncAltIcon, permiso: PERMISO_INVENTARIO },
       { label: 'Familias', path: '/familias', icon: CategoryIcon, permiso: PERMISO_INVENTARIO },
       { label: 'Características', path: '/caracteristicas', icon: TuneIcon, permiso: PERMISO_INVENTARIO },
       { label: 'Promociones', path: '/promociones', icon: LocalOfferIcon, permiso: PERMISO_INVENTARIO },
