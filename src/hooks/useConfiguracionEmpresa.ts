@@ -20,6 +20,7 @@ export function useConfiguracionEmpresa() {
   const simboloMoneda = query.data?.moneda ?? 'Bs.'
   const permiteVentaACredito = query.data?.permiteVentaACredito ?? true
   const permiteCompraACredito = query.data?.permiteCompraACredito ?? true
+  const redondearPreciosEnteros = query.data?.redondearPreciosEnteros ?? false
   const clientePorDefecto = query.data?.clientePorDefecto ?? null
   const proveedorPorDefecto = query.data?.proveedorPorDefecto ?? null
   return {
@@ -28,6 +29,7 @@ export function useConfiguracionEmpresa() {
     simboloMoneda,
     permiteVentaACredito,
     permiteCompraACredito,
+    redondearPreciosEnteros,
     clientePorDefecto,
     proveedorPorDefecto,
     money: (n: number) => formatearMonto(n, simboloMoneda),

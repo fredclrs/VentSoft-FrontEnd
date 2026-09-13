@@ -10,6 +10,9 @@ export interface ConfiguracionEmpresa {
   permiteVentaACredito: boolean
   /** Si es false, el negocio solo compra al contado: no se puede comprar a crédito. */
   permiteCompraACredito: boolean
+  /** Si es true, el precio de venta calculado por margen de ganancia se redondea al
+   * entero de arriba (nunca pierde margen) en vez de a 2 decimales. */
+  redondearPreciosEnteros: boolean
   idClientePorDefecto?: number | null
   idProveedorPorDefecto?: number | null
   /** Datos completos del cliente/proveedor por defecto, listos para preseleccionar en

@@ -28,6 +28,7 @@ export function ConfiguracionEmpresaPage() {
   const [moneda, setMoneda] = useState('')
   const [permiteVentaACredito, setPermiteVentaACredito] = useState(true)
   const [permiteCompraACredito, setPermiteCompraACredito] = useState(true)
+  const [redondearPreciosEnteros, setRedondearPreciosEnteros] = useState(false)
   const [clientePorDefecto, setClientePorDefecto] = useState<Cliente | null>(null)
   const [proveedorPorDefecto, setProveedorPorDefecto] = useState<Proveedor | null>(null)
   const [guardadoOk, setGuardadoOk] = useState(false)
@@ -39,6 +40,7 @@ export function ConfiguracionEmpresaPage() {
       setMoneda(configuracionQuery.data.moneda)
       setPermiteVentaACredito(configuracionQuery.data.permiteVentaACredito)
       setPermiteCompraACredito(configuracionQuery.data.permiteCompraACredito)
+      setRedondearPreciosEnteros(configuracionQuery.data.redondearPreciosEnteros)
       setClientePorDefecto(configuracionQuery.data.clientePorDefecto ?? null)
       setProveedorPorDefecto(configuracionQuery.data.proveedorPorDefecto ?? null)
     }
@@ -154,6 +156,26 @@ export function ConfiguracionEmpresaPage() {
               </Typography>
             </div>
 
+            <div>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={redondearPreciosEnteros}
+                    onChange={(e) => {
+                      setRedondearPreciosEnteros(e.target.checked)
+                      setGuardadoOk(false)
+                    }}
+                  />
+                }
+                label="Este negocio no maneja centavos"
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mt: -0.5 }}>
+                {redondearPreciosEnteros
+                  ? 'Los precios calculados por margen de ganancia se redondean al número entero de arriba (nunca se pierde margen por el redondeo).'
+                  : 'Los precios calculados por margen de ganancia pueden salir con centavos (ej. 13.30), sin redondear.'}
+              </Typography>
+            </div>
+
             <Divider sx={{ my: 1 }} />
 
             <div>
@@ -206,6 +228,7 @@ export function ConfiguracionEmpresaPage() {
                     moneda: moneda.trim(),
                     permiteVentaACredito,
                     permiteCompraACredito,
+                    redondearPreciosEnteros,
                     idClientePorDefecto: clientePorDefecto?.id ?? null,
                     idProveedorPorDefecto: proveedorPorDefecto?.id ?? null,
                   })

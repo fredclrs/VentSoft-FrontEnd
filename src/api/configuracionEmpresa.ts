@@ -13,6 +13,7 @@ export interface ActualizarConfiguracionEmpresaInput {
   moneda: string
   permiteVentaACredito: boolean
   permiteCompraACredito: boolean
+  redondearPreciosEnteros: boolean
   idClientePorDefecto?: number | null
   idProveedorPorDefecto?: number | null
 }

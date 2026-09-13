@@ -62,9 +62,18 @@ const ARTICULO_VACIO: ArticuloFormValues = {
   caracteristicas: [],
 }
 
+/** Precio de venta sugerido por margen de ganancia (Costo × (1 + Margen/100)). Redondeo según
+ * la configuración del negocio: a 2 decimales normalmente, o al entero de ARRIBA (nunca abajo,
+ * para no perder margen) si el negocio no maneja centavos — mismo criterio que usa el backend
+ * al recalcular el precio sugerido después de una Compra. */
+function calcularPrecioPorMargen(costo: number, margen: number, redondearEnteros: boolean): number {
+  const precio = costo * (1 + margen / 100)
+  return redondearEnteros ? Math.ceil(precio) : Math.round(precio * 100) / 100
+}
+
 export function ArticulosPage() {
   const isMobile = useIsMobile()
-  const { money, simboloMoneda } = useConfiguracionEmpresa()
+  const { money, simboloMoneda, redondearPreciosEnteros } = useConfiguracionEmpresa()
   const queryClient = useQueryClient()
   const [busqueda, setBusqueda] = useState('')
   const [dialogAbierto, setDialogAbierto] = useState(false)
@@ -393,7 +402,7 @@ export function ArticulosPage() {
                   const nuevoCosto = Number(e.target.value)
                   actualizarCampo('costo', nuevoCosto)
                   if (form.margenGanancia != null) {
-                    actualizarCampo('precio', Math.round(nuevoCosto * (1 + form.margenGanancia / 100) * 100) / 100)
+                    actualizarCampo('precio', calcularPrecioPorMargen(nuevoCosto, form.margenGanancia, redondearPreciosEnteros))
                   }
                 }}
               />
@@ -419,7 +428,7 @@ export function ArticulosPage() {
                   const margen = valor === '' ? undefined : Number(valor)
                   actualizarCampo('margenGanancia', margen)
                   if (margen != null) {
-                    actualizarCampo('precio', Math.round(form.costo * (1 + margen / 100) * 100) / 100)
+                    actualizarCampo('precio', calcularPrecioPorMargen(form.costo, margen, redondearPreciosEnteros))
                   }
                 }}
                 helperText={
