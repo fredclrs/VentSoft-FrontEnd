@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -58,7 +58,7 @@ interface DevolucionDialogProps {
  * acá solo se muestra una vista previa para guiar al cajero. */
 export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: DevolucionDialogProps) {
   const { usuario } = useAuth()
-  const { nombreNegocio, simboloMoneda, money } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteVentaACredito } = useConfiguracionEmpresa()
   const queryClient = useQueryClient()
 
   const [cantidades, setCantidades] = useState<Record<number, string>>({})
@@ -144,6 +144,13 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
     const extraAPagar = Math.max(0, nuevaDeuda - venta.porPagar)
     return { sobrante, extraAPagar }
   }, [venta.total, venta.pagado, venta.porPagar, totalDevuelto, totalCambio])
+
+  // Si el negocio no vende a crédito, la diferencia a favor del negocio en un cambio se cobra
+  // SIEMPRE completa (mismo criterio que "Contado" en Ventas) — no se puede dejar ni un poco
+  // como deuda nueva solo porque vino disfrazada de cambio en vez de una venta común.
+  useEffect(() => {
+    if (!permiteVentaACredito) setMontoCobradoAhora(String(preview.extraAPagar))
+  }, [permiteVentaACredito, preview.extraAPagar])
 
   function limpiar() {
     setCantidades({})
@@ -468,17 +475,24 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
               {preview.extraAPagar > 0 && (
                 <>
                   <Alert severity="warning">
-                    Se lleva {money(preview.extraAPagar)} más de lo que devuelve — esa diferencia se suma a lo que debe.
+                    {permiteVentaACredito
+                      ? `Se lleva ${money(preview.extraAPagar)} más de lo que devuelve — esa diferencia se suma a lo que debe.`
+                      : `Se lleva ${money(preview.extraAPagar)} más de lo que devuelve — este negocio no vende a crédito, así que se cobra completo ahora.`}
                   </Alert>
                   <TextField
                     label="Cobrar ahora"
                     type="number"
                     size="small"
+                    disabled={!permiteVentaACredito}
                     value={montoCobradoAhora}
                     onChange={(e) => setMontoCobradoAhora(e.target.value)}
-                    helperText={`Lo que no se cobre ahora (${money(
-                      Math.max(0, preview.extraAPagar - (Number(montoCobradoAhora) || 0)),
-                    )}) queda pendiente como deuda.`}
+                    helperText={
+                      permiteVentaACredito
+                        ? `Lo que no se cobre ahora (${money(
+                            Math.max(0, preview.extraAPagar - (Number(montoCobradoAhora) || 0)),
+                          )}) queda pendiente como deuda.`
+                        : 'Se carga solo (este negocio no vende a crédito)'
+                    }
                     slotProps={{ htmlInput: { min: 0, max: preview.extraAPagar } }}
                   />
                 </>
