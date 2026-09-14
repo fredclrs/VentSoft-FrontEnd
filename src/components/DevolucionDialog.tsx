@@ -24,6 +24,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
+import { ConfirmDialog } from './ConfirmDialog'
 import { EntityAutocomplete } from './EntityAutocomplete'
 import { obtenerUbicacion } from '../utils/articulo'
 import { articulosApi, buscarArticulos, getStockTodos } from '../api/articulos'
@@ -65,6 +66,9 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
   const [esCambio, setEsCambio] = useState(false)
   const [articulosNuevos, setArticulosNuevos] = useState<LineaCambio[]>([])
   const [articuloParaAgregar, setArticuloParaAgregar] = useState<Articulo | null>(null)
+  // Si destilda "Es un cambio" habiendo algo cargado, se le confirma antes de perderlo — sin
+  // esto, quedaba oculto pero sin borrarse de verdad (reaparecía si volvía a tildar).
+  const [confirmarDescartarCambio, setConfirmarDescartarCambio] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [montoCobradoAhora, setMontoCobradoAhora] = useState('0')
   const [devolverEnEfectivo, setDevolverEnEfectivo] = useState(true)
@@ -151,6 +155,28 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
     setMontoCobradoAhora('0')
     setDevolverEnEfectivo(true)
     setError(null)
+  }
+
+  /** Tildar "Es un cambio" es directo. Destildarlo, si hay algo cargado (un artículo ya
+   * agregado, o elegido pero todavía sin agregar), primero confirma — para no perderlo sin
+   * darse cuenta. Si no hay nada cargado, destilda derecho. */
+  function alTildarCambio(checked: boolean) {
+    if (checked) {
+      setEsCambio(true)
+      return
+    }
+    if (articulosNuevos.length > 0 || articuloParaAgregar) {
+      setConfirmarDescartarCambio(true)
+      return
+    }
+    setEsCambio(false)
+  }
+
+  function confirmarDescartarCambioYDestildar() {
+    setArticulosNuevos([])
+    setArticuloParaAgregar(null)
+    setEsCambio(false)
+    setConfirmarDescartarCambio(false)
   }
 
   function cerrar() {
@@ -251,6 +277,7 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
   })
 
   return (
+    <>
     <Dialog open={open} onClose={cerrar} maxWidth="md" fullWidth>
       <DialogTitle>
         {esCambio ? 'Cambio' : 'Devolución'} — Venta #{venta.id}
@@ -313,7 +340,7 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
 
           <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
             <FormControlLabel
-              control={<Checkbox checked={esCambio} onChange={(e) => setEsCambio(e.target.checked)} />}
+              control={<Checkbox checked={esCambio} onChange={(e) => alTildarCambio(e.target.checked)} />}
               label="Es un cambio (el cliente se lleva otro artículo)"
             />
             <FormControlLabel
@@ -498,5 +525,15 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
         </Button>
       </DialogActions>
     </Dialog>
+
+    <ConfirmDialog
+      open={confirmarDescartarCambio}
+      titulo="Descartar el cambio"
+      mensaje={`Tenés ${articulosNuevos.length > 0 ? `${articulosNuevos.length} artículo(s) cargado(s)` : 'un artículo elegido'} para el cambio. Si destildás "Es un cambio" ahora, se descarta. ¿Seguro?`}
+      confirmarLabel="Descartar"
+      onConfirmar={confirmarDescartarCambioYDestildar}
+      onCancelar={() => setConfirmarDescartarCambio(false)}
+    />
+    </>
   )
 }
