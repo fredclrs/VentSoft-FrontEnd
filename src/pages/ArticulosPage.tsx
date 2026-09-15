@@ -29,6 +29,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import BarcodeIcon from '@mui/icons-material/BarcodeReader'
+import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined'
 import { articulosApi } from '../api/articulos'
 import { familiasApi } from '../api/familias'
 import { promocionesApi } from '../api/promociones'
@@ -78,6 +79,7 @@ export function ArticulosPage() {
   const [busqueda, setBusqueda] = useState('')
   const [dialogAbierto, setDialogAbierto] = useState(false)
   const [articuloEnEdicion, setArticuloEnEdicion] = useState<Articulo | null>(null)
+  const [esDuplicado, setEsDuplicado] = useState(false)
   const [form, setForm] = useState<ArticuloFormValues>(ARTICULO_VACIO)
   const [errorMutacion, setErrorMutacion] = useState<string | null>(null)
   const [articuloAEliminar, setArticuloAEliminar] = useState<Articulo | null>(null)
@@ -125,6 +127,7 @@ export function ArticulosPage() {
 
   function abrirNuevo() {
     setArticuloEnEdicion(null)
+    setEsDuplicado(false)
     setForm(ARTICULO_VACIO)
     setErrorMutacion(null)
     setDialogAbierto(true)
@@ -132,6 +135,7 @@ export function ArticulosPage() {
 
   function abrirEdicion(articulo: Articulo) {
     setArticuloEnEdicion(articulo)
+    setEsDuplicado(false)
     setForm({
       codigo: articulo.codigo,
       descripcion: articulo.descripcion ?? '',
@@ -148,6 +152,33 @@ export function ArticulosPage() {
       idFamilia: articulo.idFamilia,
       idPromocion: articulo.idPromocion ?? undefined,
       caracteristicas: articulo.caracteristicas,
+    })
+    setErrorMutacion(null)
+    setDialogAbierto(true)
+  }
+
+  /** Precarga el alta con los datos de un artículo existente (marca, familia, precio, etc.) para
+   * no volver a tipear todo cuando lo único que cambia es la talla/color — el caso típico de
+   * indumentaria. Código y tamaño quedan vacíos porque son justo lo que hay que cambiar. */
+  function abrirDuplicado(articulo: Articulo) {
+    setArticuloEnEdicion(null)
+    setEsDuplicado(true)
+    setForm({
+      codigo: '',
+      descripcion: articulo.descripcion ?? '',
+      tamano: '',
+      unidadMedida: articulo.unidadMedida ?? '',
+      fraccion: articulo.fraccion,
+      precio: articulo.precio,
+      costo: articulo.costo,
+      precioUnidadSuelta: articulo.precioUnidadSuelta ?? undefined,
+      margenGanancia: articulo.margenGanancia ?? undefined,
+      stockMinimo: articulo.stockMinimo ?? undefined,
+      stockIdeal: articulo.stockIdeal ?? undefined,
+      imagen: articulo.imagen ?? '',
+      idFamilia: articulo.idFamilia,
+      idPromocion: articulo.idPromocion ?? undefined,
+      caracteristicas: articulo.caracteristicas.map((c) => ({ ...c, id: 0, valor: '' })),
     })
     setErrorMutacion(null)
     setDialogAbierto(true)
@@ -280,6 +311,9 @@ export function ArticulosPage() {
                   <IconButton size="small" onClick={() => abrirEdicion(articulo)}>
                     <EditIcon fontSize="small" />
                   </IconButton>
+                  <IconButton size="small" title="Duplicar artículo" onClick={() => abrirDuplicado(articulo)}>
+                    <ContentCopyIcon fontSize="small" />
+                  </IconButton>
                   <IconButton
                     size="small"
                     color="error"
@@ -299,10 +333,18 @@ export function ArticulosPage() {
       </TableContainer>
 
       <Dialog open={dialogAbierto} onClose={cerrarDialog} maxWidth="sm" fullWidth fullScreen={isMobile}>
-        <DialogTitle>{articuloEnEdicion ? 'Editar artículo' : 'Nuevo artículo'}</DialogTitle>
+        <DialogTitle>
+          {articuloEnEdicion ? 'Editar artículo' : esDuplicado ? 'Duplicar artículo' : 'Nuevo artículo'}
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {errorMutacion && <Alert severity="error">{errorMutacion}</Alert>}
+            {esDuplicado && !errorMutacion && (
+              <Alert severity="info">
+                Se copiaron los demás datos del artículo original — completá el Código y el
+                Tamaño/variante (y las características que cambien, como la talla) para este nuevo.
+              </Alert>
+            )}
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 2fr' }, gap: 2 }}>
               <TextField
