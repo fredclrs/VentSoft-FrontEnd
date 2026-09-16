@@ -19,6 +19,16 @@ export interface PrecioSugerido {
   precioSugerido: number
 }
 
+/** Un artículo SIN margen de ganancia configurado cuyo costo subió al registrar la compra — el
+ * sistema no puede recalcular el precio solo, esto es solo un aviso para revisarlo a mano. */
+export interface AvisoSinMargen {
+  idArticulo: number
+  codigo: string
+  precioActual: number
+  costoAnterior: number
+  costoNuevo: number
+}
+
 export interface Compra {
   id: number
   fecha: string
@@ -32,6 +42,7 @@ export interface Compra {
   idProveedor: number
   detalles: DetalleCompra[]
   preciosSugeridos: PrecioSugerido[]
+  avisosSinMargen: AvisoSinMargen[]
 }
 
 export interface RegistrarDetalleCompra {

@@ -63,12 +63,14 @@ const ARTICULO_VACIO: ArticuloFormValues = {
   caracteristicas: [],
 }
 
-/** Precio de venta sugerido por margen de ganancia (Costo × (1 + Margen/100)). Redondeo según
- * la configuración del negocio: a 2 decimales normalmente, o al entero de ARRIBA (nunca abajo,
- * para no perder margen) si el negocio no maneja centavos — mismo criterio que usa el backend
- * al recalcular el precio sugerido después de una Compra. */
+/** Precio de venta sugerido por margen de ganancia, calculado sobre el PRECIO DE VENTA
+ * (Costo / (1 - Margen/100)) — es la convención de indumentaria: un margen de 40% significa que
+ * el costo es el 60% del precio final, no que el precio es el costo + 40%. Redondeo según la
+ * configuración del negocio: a 2 decimales normalmente, o al entero de ARRIBA (nunca abajo, para
+ * no perder margen) si el negocio no maneja centavos — mismo criterio que usa el backend al
+ * recalcular el precio sugerido después de una Compra. */
 function calcularPrecioPorMargen(costo: number, margen: number, redondearEnteros: boolean): number {
-  const precio = costo * (1 + margen / 100)
+  const precio = costo / (1 - margen / 100)
   return redondearEnteros ? Math.ceil(precio) : Math.round(precio * 100) / 100
 }
 
@@ -218,7 +220,10 @@ export function ArticulosPage() {
   }
 
   const camposObligatoriosCompletos =
-    form.codigo.trim() && form.tamano.trim() && form.idFamilia > 0
+    form.codigo.trim() &&
+    form.tamano.trim() &&
+    form.idFamilia > 0 &&
+    (form.margenGanancia == null || form.margenGanancia < 100)
 
   return (
     <Stack spacing={3}>
@@ -469,14 +474,18 @@ export function ArticulosPage() {
                   const valor = e.target.value
                   const margen = valor === '' ? undefined : Number(valor)
                   actualizarCampo('margenGanancia', margen)
-                  if (margen != null) {
+                  if (margen != null && margen < 100) {
                     actualizarCampo('precio', calcularPrecioPorMargen(form.costo, margen, redondearPreciosEnteros))
                   }
                 }}
+                error={form.margenGanancia != null && form.margenGanancia >= 100}
+                slotProps={{ htmlInput: { min: 0, max: 99.99, step: 0.01 } }}
                 helperText={
-                  form.margenGanancia != null
-                    ? 'El precio de venta se recalcula solo cada vez que compres este artículo y el costo cambie — no hace falta tocarlo a mano.'
-                    : 'Si lo dejás vacío, el precio de venta sigue siendo 100% manual, como siempre.'
+                  form.margenGanancia != null && form.margenGanancia >= 100
+                    ? 'Tiene que ser menor a 100 (es sobre el precio de venta: el costo es el (100 - margen)% del precio).'
+                    : form.margenGanancia != null
+                      ? 'El precio de venta se recalcula solo cada vez que compres este artículo y el costo cambie — no hace falta tocarlo a mano.'
+                      : 'Si lo dejás vacío, el precio de venta sigue siendo 100% manual, como siempre.'
                 }
               />
             </Box>

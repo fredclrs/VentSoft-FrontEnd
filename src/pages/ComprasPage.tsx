@@ -41,7 +41,7 @@ import { getErrorMessage } from '../api/errors'
 import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import type { Proveedor } from '../types/proveedor'
 import type { Articulo } from '../types/articulo'
-import type { PrecioSugerido, RegistrarDetalleCompra } from '../types/compra'
+import type { AvisoSinMargen, PrecioSugerido, RegistrarDetalleCompra } from '../types/compra'
 
 interface LineaCompra {
   articulo: Articulo
@@ -89,6 +89,7 @@ export function ComprasPage() {
   // Por defecto todos marcados para aplicar — el cajero desmarca los que no quiere.
   const [preciosAceptados, setPreciosAceptados] = useState<Record<number, boolean>>({})
   const [errorPrecios, setErrorPrecios] = useState<string | null>(null)
+  const [avisosSinMargen, setAvisosSinMargen] = useState<AvisoSinMargen[] | null>(null)
   const [avisoExito, setAvisoExito] = useState<string | null>(null)
   const scanInputRef = useRef<HTMLInputElement>(null)
 
@@ -192,6 +193,9 @@ export function ComprasPage() {
       if (compra.preciosSugeridos.length > 0) {
         setPreciosSugeridos(compra.preciosSugeridos)
         setPreciosAceptados(Object.fromEntries(compra.preciosSugeridos.map((p) => [p.idArticulo, true])))
+      }
+      if (compra.avisosSinMargen.length > 0) {
+        setAvisosSinMargen(compra.avisosSinMargen)
       }
       resetearCompra()
     },
@@ -572,6 +576,33 @@ export function ComprasPage() {
             onClick={() => aplicarPreciosMutation.mutate()}
           >
             {aplicarPreciosMutation.isPending ? 'Aplicando…' : 'Confirmar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!avisosSinMargen} onClose={() => setAvisosSinMargen(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Revisá el precio de venta</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 1 }}>
+            Estos artículos no tienen un margen de ganancia configurado y su costo subió — el
+            sistema no puede recalcular el precio de venta solo, revisalo a mano.
+          </DialogContentText>
+          <Stack spacing={1}>
+            {(avisosSinMargen ?? []).map((a) => (
+              <Stack key={a.idArticulo} spacing={0}>
+                <Typography variant="body2">
+                  <strong>{a.codigo}</strong> — Precio de venta actual: {money(a.precioActual)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Costo: {money(a.costoAnterior)} → {money(a.costoNuevo)}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={() => setAvisosSinMargen(null)}>
+            Entendido
           </Button>
         </DialogActions>
       </Dialog>

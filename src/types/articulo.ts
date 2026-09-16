@@ -18,9 +18,11 @@ export interface Articulo {
   costo: number
   /** Precio de una unidad suelta (fuera del paquete). Null = usar precio/fraccion de referencia. */
   precioUnidadSuelta?: number | null
-  /** Margen de ganancia deseado (%, ej. 40 = 40%), opcional. Si está cargado, "precio" se
-   * recalcula solo (costo × (1 + margen/100)) cada vez que cambia el costo al comprar — no se
-   * edita a mano. Null = precio 100% manual, como siempre. */
+  /** Margen de ganancia deseado sobre el PRECIO DE VENTA (%, ej. 40 = 40%: de cada $100 que
+   * entran, $40 son ganancia — convención de indumentaria, no markup sobre costo), opcional. Si
+   * está cargado, "precio" se recalcula solo (costo / (1 - margen/100)) cada vez que cambia el
+   * costo al comprar — no se edita a mano. Debe ser < 100. Null = precio 100% manual, como
+   * siempre. */
   margenGanancia?: number | null
   stockMinimo?: number | null
   stockIdeal?: number | null
