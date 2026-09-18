@@ -63,6 +63,21 @@ const ARTICULO_VACIO: ArticuloFormValues = {
   caracteristicas: [],
 }
 
+/** Una fila de la tabla de variantes en "Nuevo producto (variantes)". Sin campos fijos de
+ * "Talla"/"Color": son Características libres (igual que en el alta normal de un artículo), una
+ * o varias por fila — el "Tamaño" que exige la base se arma solo uniendo sus valores (ver
+ * tamanoDeFila). Costo/Precio son "override": null significa que esa fila todavía usa el valor
+ * de arriba (el default del producto) — así cambiar el default de arriba actualiza todas las
+ * filas que no se tocaron a mano, y las que sí se tocaron (ej. la talla más grande, que cuesta
+ * un poco más) quedan con su propio valor sin que las demás se vean afectadas. */
+interface FilaVariante {
+  caracteristicas: ArticuloCaracteristica[]
+  costoOverride: number | null
+  precioOverride: number | null
+}
+
+const FILA_VARIANTE_VACIA: FilaVariante = { caracteristicas: [], costoOverride: null, precioOverride: null }
+
 /** Precio de venta sugerido por margen de ganancia, calculado sobre el PRECIO DE VENTA
  * (Costo / (1 - Margen/100)) — es la convención de indumentaria: un margen de 40% significa que
  * el costo es el 60% del precio final, no que el precio es el costo + 40%. Redondeo según la
@@ -76,7 +91,8 @@ function calcularPrecioPorMargen(costo: number, margen: number, redondearEnteros
 
 export function ArticulosPage() {
   const isMobile = useIsMobile()
-  const { money, simboloMoneda, redondearPreciosEnteros } = useConfiguracionEmpresa()
+  const { money, simboloMoneda, redondearPreciosEnteros, permiteCodigoCompartidoEntreArticulos } =
+    useConfiguracionEmpresa()
   const queryClient = useQueryClient()
   const [busqueda, setBusqueda] = useState('')
   const [dialogAbierto, setDialogAbierto] = useState(false)
@@ -88,6 +104,23 @@ export function ArticulosPage() {
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null)
   const [articuloParaEtiqueta, setArticuloParaEtiqueta] = useState<Articulo | null>(null)
   const [cantidadEtiquetas, setCantidadEtiquetas] = useState('1')
+
+  // "Nuevo producto (variantes)" — solo visible con el código compartido activado (ver
+  // ConfiguracionEmpresa.PermiteCodigoCompartidoEntreArticulos): carga un producto (código,
+  // familia, costo/precio) una sola vez y una tabla de variantes (talla + color opcional), y al
+  // guardar crea un Artículo por fila, todos con el mismo código. Sin cantidad: el stock se carga
+  // después por Compras o Ajuste de stock, como cualquier artículo nuevo.
+  const [dialogVariantesAbierto, setDialogVariantesAbierto] = useState(false)
+  const [baseVariantes, setBaseVariantes] = useState({
+    codigo: '',
+    descripcion: '',
+    idFamilia: 0,
+    costo: 0,
+    precio: 0,
+    margenGanancia: undefined as number | undefined,
+  })
+  const [filasVariantes, setFilasVariantes] = useState<FilaVariante[]>([FILA_VARIANTE_VACIA])
+  const [errorVariantes, setErrorVariantes] = useState<string | null>(null)
 
   const articulosQuery = useQuery({ queryKey: ARTICULOS_QUERY_KEY, queryFn: () => articulosApi.search() })
   const familiasQuery = useQuery({ queryKey: ['familias'], queryFn: () => familiasApi.search() })
@@ -219,6 +252,138 @@ export function ArticulosPage() {
     )
   }
 
+  function abrirNuevoConVariantes() {
+    setBaseVariantes({ codigo: '', descripcion: '', idFamilia: 0, costo: 0, precio: 0, margenGanancia: undefined })
+    setFilasVariantes([FILA_VARIANTE_VACIA])
+    setErrorVariantes(null)
+    setDialogVariantesAbierto(true)
+  }
+
+  function cerrarDialogVariantes() {
+    setDialogVariantesAbierto(false)
+  }
+
+  function actualizarBaseVariantes<K extends keyof typeof baseVariantes>(campo: K, valor: (typeof baseVariantes)[K]) {
+    setBaseVariantes((prev) => ({ ...prev, [campo]: valor }))
+  }
+
+  function quitarFilaVariante(index: number) {
+    setFilasVariantes((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function agregarCaracteristicaFila(indexFila: number) {
+    const primera = caracteristicasQuery.data?.[0]
+    if (!primera) return
+    setFilasVariantes((prev) =>
+      prev.map((f, i) =>
+        i === indexFila
+          ? {
+              ...f,
+              caracteristicas: [
+                ...f.caracteristicas,
+                { id: 0, idCaracteristica: primera.id, nombreCaracteristica: primera.nombreCaracteristica, valor: '' },
+              ],
+            }
+          : f,
+      ),
+    )
+  }
+
+  function actualizarCaracteristicaFila(indexFila: number, indexCaract: number, cambios: Partial<ArticuloCaracteristica>) {
+    setFilasVariantes((prev) =>
+      prev.map((f, i) => {
+        if (i !== indexFila) return f
+        const copia = [...f.caracteristicas]
+        copia[indexCaract] = { ...copia[indexCaract], ...cambios }
+        return { ...f, caracteristicas: copia }
+      }),
+    )
+  }
+
+  function quitarCaracteristicaFila(indexFila: number, indexCaract: number) {
+    setFilasVariantes((prev) =>
+      prev.map((f, i) => (i === indexFila ? { ...f, caracteristicas: f.caracteristicas.filter((_, j) => j !== indexCaract) } : f)),
+    )
+  }
+
+  /** El "Tamaño" que exige la base se arma solo uniendo los valores de las características de
+   * la fila (ej. "40 · Azul") — no es un campo que el negocio llene a mano acá. */
+  function tamanoDeFila(fila: FilaVariante): string {
+    return fila.caracteristicas
+      .map((c) => c.valor.trim())
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  function costoEfectivo(fila: FilaVariante): number {
+    return fila.costoOverride ?? baseVariantes.costo
+  }
+
+  /** Si hay Margen configurado, el precio de cada fila SIEMPRE se calcula solo a partir de su
+   * propio costo (igual que en el alta normal) — no admite override manual en ese caso. Sin
+   * Margen, es el default de arriba salvo que se haya tocado esa fila puntual. */
+  function precioEfectivo(fila: FilaVariante): number {
+    if (baseVariantes.margenGanancia != null && baseVariantes.margenGanancia < 100) {
+      return calcularPrecioPorMargen(costoEfectivo(fila), baseVariantes.margenGanancia, redondearPreciosEnteros)
+    }
+    return fila.precioOverride ?? baseVariantes.precio
+  }
+
+  const camposObligatoriosVariantesCompletos =
+    baseVariantes.codigo.trim() &&
+    baseVariantes.idFamilia > 0 &&
+    filasVariantes.some((f) => tamanoDeFila(f)) &&
+    (baseVariantes.margenGanancia == null || baseVariantes.margenGanancia < 100)
+
+  const guardarVariantesMutation = useMutation({
+    mutationFn: async () => {
+      const filas = filasVariantes.filter((f) => tamanoDeFila(f))
+      if (filas.length === 0) throw new Error('Agregá al menos una variante con alguna característica (talla, color, etc.).')
+
+      const resultados = await Promise.allSettled(
+        filas.map((fila) =>
+          articulosApi.create({
+            codigo: baseVariantes.codigo,
+            descripcion: baseVariantes.descripcion,
+            tamano: tamanoDeFila(fila),
+            unidadMedida: '',
+            fraccion: 1,
+            precio: precioEfectivo(fila),
+            costo: costoEfectivo(fila),
+            precioUnidadSuelta: undefined,
+            margenGanancia: baseVariantes.margenGanancia,
+            stockMinimo: undefined,
+            stockIdeal: undefined,
+            imagen: '',
+            idFamilia: baseVariantes.idFamilia,
+            idPromocion: undefined,
+            caracteristicas: fila.caracteristicas
+              .filter((c) => c.valor.trim())
+              .map((c) => ({ ...c, valor: c.valor.trim() })),
+          }),
+        ),
+      )
+
+      const fallidas = resultados
+        .map((resultado, i) => ({ resultado, fila: filas[i] }))
+        .filter((x): x is { resultado: PromiseRejectedResult; fila: FilaVariante } => x.resultado.status === 'rejected')
+
+      if (fallidas.length > 0) {
+        // Deja en la tabla solo las que fallaron (las que sí se crearon ya no hace falta
+        // reintentarlas), para poder corregir y volver a guardar sin repetir todo.
+        setFilasVariantes(fallidas.map((x) => x.fila))
+        throw new Error(
+          `${fallidas.length} de ${filas.length} variante(s) no se pudieron crear (quedaron en la lista para reintentar). Primer error: ${getErrorMessage(fallidas[0].resultado.reason)}`,
+        )
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ARTICULOS_QUERY_KEY })
+      cerrarDialogVariantes()
+    },
+    onError: (err) => setErrorVariantes(getErrorMessage(err)),
+  })
+
   const camposObligatoriosCompletos =
     form.codigo.trim() &&
     form.tamano.trim() &&
@@ -231,9 +396,16 @@ export function ArticulosPage() {
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           Artículos
         </Typography>
-        <Button startIcon={<AddIcon />} variant="contained" onClick={abrirNuevo}>
-          Nuevo artículo
-        </Button>
+        <Stack direction="row" spacing={1}>
+          {permiteCodigoCompartidoEntreArticulos && (
+            <Button startIcon={<AddIcon />} variant="outlined" onClick={abrirNuevoConVariantes}>
+              Nuevo producto (variantes)
+            </Button>
+          )}
+          <Button startIcon={<AddIcon />} variant="contained" onClick={abrirNuevo}>
+            Nuevo artículo
+          </Button>
+        </Stack>
       </Stack>
 
       <TextField
@@ -596,6 +768,224 @@ export function ArticulosPage() {
             onClick={() => guardarMutation.mutate()}
           >
             {guardarMutation.isPending ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={dialogVariantesAbierto}
+        onClose={cerrarDialogVariantes}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle>Nuevo producto (variantes)</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {errorVariantes && <Alert severity="error">{errorVariantes}</Alert>}
+            <Alert severity="info">
+              Cargá los datos una sola vez y agregá abajo cada talla/color — se crea un Artículo
+              por fila, todos con el mismo código. Arranca sin stock: se carga después por
+              Compras o Ajuste de stock.
+            </Alert>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 2fr' }, gap: 2 }}>
+              <TextField
+                label="Código"
+                required
+                fullWidth
+                value={baseVariantes.codigo}
+                onChange={(e) => actualizarBaseVariantes('codigo', e.target.value)}
+                helperText="El mismo para todas las variantes de abajo."
+              />
+              <TextField
+                label="Descripción"
+                fullWidth
+                value={baseVariantes.descripcion}
+                onChange={(e) => actualizarBaseVariantes('descripcion', e.target.value)}
+              />
+            </Box>
+
+            <TextField
+              select
+              label="Familia"
+              required
+              fullWidth
+              value={baseVariantes.idFamilia || ''}
+              onChange={(e) => actualizarBaseVariantes('idFamilia', Number(e.target.value))}
+              sx={{ maxWidth: { sm: '50%' } }}
+              helperText={
+                !familiasQuery.isLoading && (familiasQuery.data?.length ?? 0) === 0 ? (
+                  <>
+                    No hay familias creadas —{' '}
+                    <Link component={RouterLink} to="/familias">
+                      crear una
+                    </Link>
+                  </>
+                ) : undefined
+              }
+            >
+              {(familiasQuery.data ?? []).map((f) => (
+                <MenuItem key={f.id} value={f.id}>
+                  {f.nombreFamilia}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
+              <TextField
+                label="Costo (por defecto)"
+                type="number"
+                fullWidth
+                value={baseVariantes.costo}
+                onChange={(e) => actualizarBaseVariantes('costo', Number(e.target.value))}
+                helperText="Cada fila puede pisarlo."
+              />
+              <TextField
+                label="Precio de venta (por defecto)"
+                type="number"
+                fullWidth
+                disabled={baseVariantes.margenGanancia != null}
+                value={
+                  baseVariantes.margenGanancia != null && baseVariantes.margenGanancia < 100
+                    ? calcularPrecioPorMargen(baseVariantes.costo, baseVariantes.margenGanancia, redondearPreciosEnteros)
+                    : baseVariantes.precio
+                }
+                onChange={(e) => actualizarBaseVariantes('precio', Number(e.target.value))}
+                helperText={baseVariantes.margenGanancia != null ? 'Se calcula solo por el margen' : 'Cada fila puede pisarlo.'}
+              />
+              <TextField
+                label="Margen de ganancia % (opcional)"
+                type="number"
+                fullWidth
+                value={baseVariantes.margenGanancia ?? ''}
+                onChange={(e) => {
+                  const valor = e.target.value
+                  actualizarBaseVariantes('margenGanancia', valor === '' ? undefined : Number(valor))
+                }}
+                error={baseVariantes.margenGanancia != null && baseVariantes.margenGanancia >= 100}
+                slotProps={{ htmlInput: { min: 0, max: 99.99, step: 0.01 } }}
+                helperText={
+                  baseVariantes.margenGanancia != null && baseVariantes.margenGanancia >= 100
+                    ? 'Tiene que ser menor a 100.'
+                    : 'Si se carga, el precio de cada fila se calcula solo.'
+                }
+              />
+            </Box>
+
+            <Divider />
+
+            <Typography variant="subtitle2">Variantes</Typography>
+            {!caracteristicasQuery.isLoading && (caracteristicasQuery.data?.length ?? 0) === 0 && (
+              <Alert severity="warning">
+                Todavía no hay ninguna Característica creada (Talla, Color, etc.) —{' '}
+                <Link component={RouterLink} to="/caracteristicas">
+                  creá al menos una
+                </Link>{' '}
+                para poder armar las variantes.
+              </Alert>
+            )}
+            <Stack spacing={2}>
+              {filasVariantes.map((fila, index) => (
+                <Paper key={index} variant="outlined" sx={{ p: 1.5 }}>
+                  <Stack spacing={1}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr auto' }, gap: 1.5, alignItems: 'flex-start' }}>
+                      <TextField
+                        label="Costo"
+                        type="number"
+                        size="small"
+                        fullWidth
+                        value={costoEfectivo(fila)}
+                        onChange={(e) => actualizarFilaVariante(index, { costoOverride: Number(e.target.value) })}
+                      />
+                      <TextField
+                        label="Precio"
+                        type="number"
+                        size="small"
+                        fullWidth
+                        disabled={baseVariantes.margenGanancia != null}
+                        value={precioEfectivo(fila)}
+                        onChange={(e) => actualizarFilaVariante(index, { precioOverride: Number(e.target.value) })}
+                      />
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => quitarFilaVariante(index)}
+                        disabled={filasVariantes.length === 1}
+                        sx={{ justifySelf: 'end' }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+
+                    {/* Talla, color, etc. — las mismas Características que en el alta normal de
+                        un artículo. El "Tamaño" que exige la base se arma solo con estos valores
+                        (ver tamanoDeFila), acá no aparece como campo aparte. */}
+                    {fila.caracteristicas.map((c, indexCaract) => (
+                      <Box
+                        key={indexCaract}
+                        sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1.5fr 1fr auto' }, gap: 1 }}
+                      >
+                        <TextField
+                          select
+                          size="small"
+                          label="Característica"
+                          value={c.idCaracteristica}
+                          onChange={(e) => {
+                            const idCaracteristica = Number(e.target.value)
+                            const nombre = caracteristicasQuery.data?.find((x) => x.id === idCaracteristica)
+                              ?.nombreCaracteristica
+                            actualizarCaracteristicaFila(index, indexCaract, { idCaracteristica, nombreCaracteristica: nombre })
+                          }}
+                        >
+                          {(caracteristicasQuery.data ?? []).map((carac) => (
+                            <MenuItem key={carac.id} value={carac.id}>
+                              {carac.nombreCaracteristica}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                        <TextField
+                          size="small"
+                          label="Valor"
+                          value={c.valor}
+                          onChange={(e) => actualizarCaracteristicaFila(index, indexCaract, { valor: e.target.value })}
+                        />
+                        <IconButton size="small" color="error" onClick={() => quitarCaracteristicaFila(index, indexCaract)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    ))}
+                    <Button
+                      startIcon={<AddIcon />}
+                      size="small"
+                      sx={{ alignSelf: 'flex-start' }}
+                      disabled={(caracteristicasQuery.data?.length ?? 0) === 0}
+                      onClick={() => agregarCaracteristicaFila(index)}
+                    >
+                      Agregar característica
+                    </Button>
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
+            <Button
+              startIcon={<AddIcon />}
+              size="small"
+              sx={{ alignSelf: 'flex-start' }}
+              onClick={() => setFilasVariantes((prev) => [...prev, FILA_VARIANTE_VACIA])}
+            >
+              Agregar variante
+            </Button>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cerrarDialogVariantes}>Cancelar</Button>
+          <Button
+            variant="contained"
+            disabled={guardarVariantesMutation.isPending || !camposObligatoriosVariantesCompletos}
+            onClick={() => guardarVariantesMutation.mutate()}
+          >
+            {guardarVariantesMutation.isPending ? 'Guardando…' : `Guardar (${filasVariantes.filter((f) => tamanoDeFila(f)).length})`}
           </Button>
         </DialogActions>
       </Dialog>

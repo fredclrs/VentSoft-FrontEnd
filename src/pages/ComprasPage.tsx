@@ -30,11 +30,12 @@ import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import BarcodeIcon from '@mui/icons-material/BarcodeReader'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
-import { obtenerUbicacion } from '../utils/articulo'
+import { SelectorVariantes } from '../components/SelectorVariantes'
+import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { fraccionDe, costoUnidadSueltaDe } from '../utils/fraccion'
 import type { ModoVentaCompra } from '../utils/fraccion'
 import { buscarProveedoresTexto } from '../api/proveedores'
-import { actualizarPrecioArticulo, articulosApi, buscarArticulos } from '../api/articulos'
+import { actualizarPrecioArticulo, articulosApi, buscarArticulos, getStockTodos } from '../api/articulos'
 import { registrarCompra } from '../api/compras'
 import { useAuth } from '../auth/AuthContext'
 import { getErrorMessage } from '../api/errors'
@@ -70,7 +71,8 @@ function costoPorUnidadDe(linea: LineaCompra): number {
 
 export function ComprasPage() {
   const { usuario } = useAuth()
-  const { money, proveedorPorDefecto, permiteCompraACredito } = useConfiguracionEmpresa()
+  const { money, proveedorPorDefecto, permiteCompraACredito, permiteCodigoCompartidoEntreArticulos } =
+    useConfiguracionEmpresa()
   const queryClient = useQueryClient()
 
   const [proveedor, setProveedor] = useState<Proveedor | null>(null)
@@ -84,6 +86,10 @@ export function ComprasPage() {
   const [modoParaAgregar, setModoParaAgregar] = useState<ModoVentaCompra>('caja')
   const [codigoEscaneado, setCodigoEscaneado] = useState('')
   const [errorEscaneo, setErrorEscaneo] = useState<string | null>(null)
+  // Cuando el código escaneado tiene más de un artículo (mismo código, distinta talla/color —
+  // ver ConfiguracionEmpresa.PermiteCodigoCompartidoEntreArticulos), se elige cuál es acá en vez
+  // de agregarlo directo.
+  const [variantesParaElegir, setVariantesParaElegir] = useState<Articulo[] | null>(null)
   const [errorMutacion, setErrorMutacion] = useState<string | null>(null)
   const [preciosSugeridos, setPreciosSugeridos] = useState<PrecioSugerido[] | null>(null)
   // Por defecto todos marcados para aplicar — el cajero desmarca los que no quiere.
@@ -95,6 +101,13 @@ export function ComprasPage() {
 
   // Solo para resolver código/descripción al agregar por escaneo; no es historial.
   const articulosQuery = useQuery({ queryKey: ['articulos'], queryFn: () => articulosApi.search() })
+  // Solo para mostrar el stock actual en el selector de variantes (ver más abajo) — a diferencia
+  // de Ventas, acá no bloquea nada (comprar no depende del stock).
+  const stockQuery = useQuery({ queryKey: ['stock', 'todos'], queryFn: getStockTodos })
+  const stockPorArticulo = useMemo(
+    () => new Map((stockQuery.data ?? []).map((s) => [s.idArticulo, s.stockActual])),
+    [stockQuery.data],
+  )
 
   const total = useMemo(() => lineas.reduce((acc, l) => acc + l.cantidad * l.costoUnitario, 0), [lineas])
 
@@ -243,22 +256,50 @@ export function ComprasPage() {
     setModoParaAgregar('caja')
   }
 
+  function elegirVariante(articulo: Articulo) {
+    // El código de barras está impreso en el paquete: escanear siempre carga "por paquete"
+    // (que para un artículo sin fracción es lo mismo que cargar la unidad).
+    agregarOIncrementarLinea(articulo, 'caja')
+    setErrorEscaneo(null)
+    setVariantesParaElegir(null)
+  }
+
   function handleScanKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    // Selector de variantes abierto: 1-9 elige directo sin escribir nada en el cuadro (el foco
+    // nunca se mueve, así se sigue escaneando sin tocar el mouse). Cualquier otra tecla que no
+    // sea Enter/Escape se ignora mientras está abierto.
+    if (variantesParaElegir) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setVariantesParaElegir(null)
+        return
+      }
+      if (/^[1-9]$/.test(e.key)) {
+        e.preventDefault()
+        const elegida = variantesParaElegir[Number(e.key) - 1]
+        if (elegida) elegirVariante(elegida)
+        return
+      }
+      if (e.key !== 'Enter') return
+    }
+
     if (e.key !== 'Enter') return
     e.preventDefault()
     const codigo = codigoEscaneado.trim()
     if (!codigo) return
 
-    const encontrado = (articulosQuery.data ?? []).find(
+    setVariantesParaElegir(null)
+    const coincidencias = (articulosQuery.data ?? []).filter(
       (a) => a.codigo.toLowerCase() === codigo.toLowerCase(),
     )
-    if (encontrado) {
-      // El código de barras está impreso en el paquete: escanear siempre carga "por
-      // paquete" (que para un artículo sin fracción es lo mismo que cargar la unidad).
-      agregarOIncrementarLinea(encontrado, 'caja')
-      setErrorEscaneo(null)
-    } else {
+    if (coincidencias.length === 0) {
       setErrorEscaneo(`No se encontró ningún artículo con el código "${codigo}".`)
+    } else if (coincidencias.length === 1) {
+      elegirVariante(coincidencias[0])
+    } else {
+      // Mismo código, varias variantes (talla/color) — se elige acá en vez de agregar directo.
+      setVariantesParaElegir(coincidencias)
+      setErrorEscaneo(null)
     }
     setCodigoEscaneado('')
   }
@@ -370,7 +411,7 @@ export function ComprasPage() {
           size="small"
           queryKey="articulos-autocomplete-compra"
           searchFn={buscarArticulos}
-          getLabel={(a: Articulo) => `${a.codigo} — ${a.descripcion ?? ''}`}
+          getLabel={(a: Articulo) => etiquetaArticulo(a, permiteCodigoCompartidoEntreArticulos)}
           getSecondaryLabel={(a: Articulo) => {
             const ubicacion = obtenerUbicacion(a)
             return `Costo: ${money(a.costo)}${ubicacion ? ` · Ubicación: ${ubicacion}` : ''}`
@@ -393,6 +434,17 @@ export function ComprasPage() {
           Agregar
         </Button>
       </Box>
+
+      {/* Aparece cuando el código escaneado tiene varias variantes (mismo código, distinta
+          talla/color). Apretar el número (o clickear) agrega esa variante — no es un Dialog a
+          propósito, para no interrumpir el flujo de escaneo con un modal. */}
+      {variantesParaElegir && (
+        <SelectorVariantes
+          variantes={variantesParaElegir}
+          stockPorArticulo={stockPorArticulo}
+          onElegir={elegirVariante}
+        />
+      )}
 
       {/* Solo aparece para artículos que se compran por paquete (fracción > 1) — el resto de
           los negocios (ropa, ferretería, etc.) nunca ve este selector. */}

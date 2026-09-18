@@ -22,10 +22,12 @@ import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { etiquetaArticulo } from '../utils/articulo'
 import { buscarArticulos, getStockArticulo } from '../api/articulos'
 import { registrarAjusteStock, getAjustesByArticulo, eliminarAjusteStock } from '../api/ajusteStock'
 import { getErrorMessage } from '../api/errors'
 import { useAuth } from '../auth/AuthContext'
+import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import type { Articulo } from '../types/articulo'
 import type { AjusteStock, TipoAjusteStock } from '../types/ajusteStock'
 
@@ -38,6 +40,7 @@ function hoyISO(): string {
  * quedaba mal sin remedio. Queda historial de cada ajuste: quién, cuándo, por qué. */
 export function AjusteStockPage() {
   const { usuario } = useAuth()
+  const { permiteCodigoCompartidoEntreArticulos } = useConfiguracionEmpresa()
   const queryClient = useQueryClient()
 
   const [articulo, setArticulo] = useState<Articulo | null>(null)
@@ -130,7 +133,7 @@ export function AjusteStockPage() {
           size="small"
           queryKey="articulos-autocomplete-ajuste-stock"
           searchFn={buscarArticulos}
-          getLabel={(a: Articulo) => `${a.codigo} — ${a.descripcion ?? ''}`}
+          getLabel={(a: Articulo) => etiquetaArticulo(a, permiteCodigoCompartidoEntreArticulos)}
           getId={(a: Articulo) => a.id}
           value={articulo}
           onChange={setArticulo}

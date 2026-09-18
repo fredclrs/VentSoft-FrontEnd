@@ -21,6 +21,7 @@ export function useConfiguracionEmpresa() {
   const permiteVentaACredito = query.data?.permiteVentaACredito ?? true
   const permiteCompraACredito = query.data?.permiteCompraACredito ?? true
   const redondearPreciosEnteros = query.data?.redondearPreciosEnteros ?? false
+  const permiteCodigoCompartidoEntreArticulos = query.data?.permiteCodigoCompartidoEntreArticulos ?? false
   const clientePorDefecto = query.data?.clientePorDefecto ?? null
   const proveedorPorDefecto = query.data?.proveedorPorDefecto ?? null
   return {
@@ -30,6 +31,7 @@ export function useConfiguracionEmpresa() {
     permiteVentaACredito,
     permiteCompraACredito,
     redondearPreciosEnteros,
+    permiteCodigoCompartidoEntreArticulos,
     clientePorDefecto,
     proveedorPorDefecto,
     money: (n: number) => formatearMonto(n, simboloMoneda),

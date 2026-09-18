@@ -14,6 +14,7 @@ export interface ActualizarConfiguracionEmpresaInput {
   permiteVentaACredito: boolean
   permiteCompraACredito: boolean
   redondearPreciosEnteros: boolean
+  permiteCodigoCompartidoEntreArticulos: boolean
   idClientePorDefecto?: number | null
   idProveedorPorDefecto?: number | null
 }

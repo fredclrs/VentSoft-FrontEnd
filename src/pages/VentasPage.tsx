@@ -25,7 +25,8 @@ import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import BarcodeIcon from '@mui/icons-material/BarcodeReader'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
-import { obtenerUbicacion } from '../utils/articulo'
+import { SelectorVariantes } from '../components/SelectorVariantes'
+import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { imprimirNotaVenta } from '../utils/notaVenta'
 import type { FormatoImpresion } from '../utils/notaVenta'
 import { fraccionDe, precioUnidadSueltaDe } from '../utils/fraccion'
@@ -67,7 +68,14 @@ function precioPorUnidadDe(linea: LineaVenta): number {
 export function VentasPage() {
   const { usuario } = useAuth()
   const queryClient = useQueryClient()
-  const { nombreNegocio, simboloMoneda, money, permiteVentaACredito, clientePorDefecto } = useConfiguracionEmpresa()
+  const {
+    nombreNegocio,
+    simboloMoneda,
+    money,
+    permiteVentaACredito,
+    permiteCodigoCompartidoEntreArticulos,
+    clientePorDefecto,
+  } = useConfiguracionEmpresa()
 
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [fecha, setFecha] = useState(hoyISO())
@@ -85,6 +93,10 @@ export function VentasPage() {
   const [modoParaAgregar, setModoParaAgregar] = useState<ModoVentaCompra>('caja')
   const [codigoEscaneado, setCodigoEscaneado] = useState('')
   const [errorEscaneo, setErrorEscaneo] = useState<string | null>(null)
+  // Cuando el código escaneado tiene más de un artículo (mismo código, distinta talla/color —
+  // ver ConfiguracionEmpresa.PermiteCodigoCompartidoEntreArticulos), se elige cuál es acá en vez
+  // de agregarlo directo.
+  const [variantesParaElegir, setVariantesParaElegir] = useState<Articulo[] | null>(null)
   const [errorMutacion, setErrorMutacion] = useState<string | null>(null)
   const [avisoExito, setAvisoExito] = useState<string | null>(null)
   const scanInputRef = useRef<HTMLInputElement>(null)
@@ -323,23 +335,60 @@ export function VentasPage() {
     setModoParaAgregar('caja')
   }
 
+  /** Agrega el artículo escaneado/elegido a la venta, o muestra el error de siempre si no hay
+   * stock — el mismo chequeo se use como se llegue a este artículo (match único o elegido del
+   * selector de variantes). */
+  function agregarSiHayStock(articulo: Articulo) {
+    if (!hayStockParaAgregar(articulo, 'caja')) {
+      setErrorEscaneo(`"${articulo.codigo}" no tiene stock disponible.`)
+    } else {
+      // El código de barras está impreso en el paquete: escanear siempre vende "por paquete"
+      // (que para un artículo sin fracción es lo mismo que vender la unidad).
+      agregarOIncrementarLinea(articulo, 'caja')
+      setErrorEscaneo(null)
+    }
+  }
+
+  function elegirVariante(articulo: Articulo) {
+    agregarSiHayStock(articulo)
+    setVariantesParaElegir(null)
+  }
+
   function handleScanKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    // Selector de variantes abierto: 1-9 elige directo sin escribir nada en el cuadro (el foco
+    // nunca se mueve, así se sigue escaneando sin tocar el mouse). Cualquier otra tecla que no
+    // sea Enter/Escape se ignora mientras está abierto.
+    if (variantesParaElegir) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setVariantesParaElegir(null)
+        return
+      }
+      if (/^[1-9]$/.test(e.key)) {
+        e.preventDefault()
+        const elegida = variantesParaElegir[Number(e.key) - 1]
+        if (elegida) elegirVariante(elegida)
+        return
+      }
+      if (e.key !== 'Enter') return
+    }
+
     if (e.key !== 'Enter') return
     e.preventDefault()
     const codigo = codigoEscaneado.trim()
     if (!codigo) return
 
-    const encontrado = (articulosQuery.data ?? []).find(
+    setVariantesParaElegir(null)
+    const coincidencias = (articulosQuery.data ?? []).filter(
       (a) => a.codigo.toLowerCase() === codigo.toLowerCase(),
     )
-    if (!encontrado) {
+    if (coincidencias.length === 0) {
       setErrorEscaneo(`No se encontró ningún artículo con el código "${codigo}".`)
-    } else if (!hayStockParaAgregar(encontrado, 'caja')) {
-      setErrorEscaneo(`"${encontrado.codigo}" no tiene stock disponible.`)
+    } else if (coincidencias.length === 1) {
+      agregarSiHayStock(coincidencias[0])
     } else {
-      // El código de barras está impreso en el paquete: escanear siempre vende "por paquete"
-      // (que para un artículo sin fracción es lo mismo que vender la unidad).
-      agregarOIncrementarLinea(encontrado, 'caja')
+      // Mismo código, varias variantes (talla/color) — se elige acá en vez de agregar directo.
+      setVariantesParaElegir(coincidencias)
       setErrorEscaneo(null)
     }
     setCodigoEscaneado('')
@@ -538,7 +587,7 @@ export function VentasPage() {
           size="small"
           queryKey="articulos-autocomplete-venta"
           searchFn={buscarArticulos}
-          getLabel={(a: Articulo) => `${a.codigo} — ${a.descripcion ?? ''}`}
+          getLabel={(a: Articulo) => etiquetaArticulo(a, permiteCodigoCompartidoEntreArticulos)}
           getSecondaryLabel={(a: Articulo) => {
             const ubicacion = obtenerUbicacion(a)
             const stock = stockPorArticulo.get(a.id) ?? 0
@@ -563,6 +612,17 @@ export function VentasPage() {
           Agregar
         </Button>
       </Box>
+
+      {/* Aparece cuando el código escaneado tiene varias variantes (mismo código, distinta
+          talla/color). Apretar el número (o clickear) agrega esa variante — no es un Dialog a
+          propósito, para no interrumpir el flujo de escaneo con un modal. */}
+      {variantesParaElegir && (
+        <SelectorVariantes
+          variantes={variantesParaElegir}
+          stockPorArticulo={stockPorArticulo}
+          onElegir={elegirVariante}
+        />
+      )}
 
       {/* Solo aparece para artículos que se venden por paquete (fracción > 1) — el resto de los
           negocios (ropa, ferretería, etc.) nunca ve este selector. */}

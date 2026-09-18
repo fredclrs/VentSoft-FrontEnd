@@ -29,6 +29,7 @@ export function ConfiguracionEmpresaPage() {
   const [permiteVentaACredito, setPermiteVentaACredito] = useState(true)
   const [permiteCompraACredito, setPermiteCompraACredito] = useState(true)
   const [redondearPreciosEnteros, setRedondearPreciosEnteros] = useState(false)
+  const [permiteCodigoCompartidoEntreArticulos, setPermiteCodigoCompartidoEntreArticulos] = useState(false)
   const [clientePorDefecto, setClientePorDefecto] = useState<Cliente | null>(null)
   const [proveedorPorDefecto, setProveedorPorDefecto] = useState<Proveedor | null>(null)
   const [guardadoOk, setGuardadoOk] = useState(false)
@@ -41,6 +42,7 @@ export function ConfiguracionEmpresaPage() {
       setPermiteVentaACredito(configuracionQuery.data.permiteVentaACredito)
       setPermiteCompraACredito(configuracionQuery.data.permiteCompraACredito)
       setRedondearPreciosEnteros(configuracionQuery.data.redondearPreciosEnteros)
+      setPermiteCodigoCompartidoEntreArticulos(configuracionQuery.data.permiteCodigoCompartidoEntreArticulos)
       setClientePorDefecto(configuracionQuery.data.clientePorDefecto ?? null)
       setProveedorPorDefecto(configuracionQuery.data.proveedorPorDefecto ?? null)
     }
@@ -176,6 +178,26 @@ export function ConfiguracionEmpresaPage() {
               </Typography>
             </div>
 
+            <div>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={permiteCodigoCompartidoEntreArticulos}
+                    onChange={(e) => {
+                      setPermiteCodigoCompartidoEntreArticulos(e.target.checked)
+                      setGuardadoOk(false)
+                    }}
+                  />
+                }
+                label="Varios artículos pueden compartir el mismo código de barras"
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mt: -0.5 }}>
+                {permiteCodigoCompartidoEntreArticulos
+                  ? 'Pensado para indumentaria: una misma prenda en varias tallas/colores puede usar un solo código impreso. Al escanear un código con varias coincidencias, se elige cuál es.'
+                  : 'El código de barras tiene que ser único por artículo, como es lo normal en la mayoría de los rubros.'}
+              </Typography>
+            </div>
+
             <Divider sx={{ my: 1 }} />
 
             <div>
@@ -229,6 +251,7 @@ export function ConfiguracionEmpresaPage() {
                     permiteVentaACredito,
                     permiteCompraACredito,
                     redondearPreciosEnteros,
+                    permiteCodigoCompartidoEntreArticulos,
                     idClientePorDefecto: clientePorDefecto?.id ?? null,
                     idProveedorPorDefecto: proveedorPorDefecto?.id ?? null,
                   })

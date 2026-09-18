@@ -26,7 +26,7 @@ import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EntityAutocomplete } from './EntityAutocomplete'
-import { obtenerUbicacion } from '../utils/articulo'
+import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { articulosApi, buscarArticulos, getStockTodos } from '../api/articulos'
 import { getDevolucionesByVenta, registrarDevolucion } from '../api/devoluciones'
 import { getErrorMessage } from '../api/errors'
@@ -58,7 +58,8 @@ interface DevolucionDialogProps {
  * acá solo se muestra una vista previa para guiar al cajero. */
 export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: DevolucionDialogProps) {
   const { usuario } = useAuth()
-  const { nombreNegocio, simboloMoneda, money, permiteVentaACredito } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteVentaACredito, permiteCodigoCompartidoEntreArticulos } =
+    useConfiguracionEmpresa()
   const queryClient = useQueryClient()
 
   const [cantidades, setCantidades] = useState<Record<number, string>>({})
@@ -364,7 +365,7 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
                   size="small"
                   queryKey="articulos-autocomplete-cambio"
                   searchFn={buscarArticulos}
-                  getLabel={(a: Articulo) => `${a.codigo} — ${a.descripcion ?? ''}`}
+                  getLabel={(a: Articulo) => etiquetaArticulo(a, permiteCodigoCompartidoEntreArticulos)}
                   getSecondaryLabel={(a: Articulo) => {
                     const ubicacion = obtenerUbicacion(a)
                     const stock = stockPorArticulo.get(a.id) ?? 0
