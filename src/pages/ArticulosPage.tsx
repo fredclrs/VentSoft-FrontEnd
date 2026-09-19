@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
@@ -30,6 +30,9 @@ import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import BarcodeIcon from '@mui/icons-material/BarcodeReader'
 import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined'
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
+import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
 import { articulosApi } from '../api/articulos'
 import { familiasApi } from '../api/familias'
 import { promocionesApi } from '../api/promociones'
@@ -79,6 +82,24 @@ interface FilaVariante {
 
 const FILA_VARIANTE_VACIA: FilaVariante = { caracteristicas: [], costoOverride: null, precioOverride: null }
 
+/** Un grupo en el listado: todos los Artículos que comparten Código + Descripción + Familia —
+ * o sea, todas las variantes (talla/color) de una misma prenda. Con
+ * PermiteCodigoCompartidoEntreArticulos apagado cada artículo es su propio grupo de 1 (el
+ * listado se ve exactamente como antes). */
+interface GrupoArticulos {
+  clave: string
+  codigo: string
+  descripcion: string
+  idFamilia: number
+  articulos: Articulo[]
+}
+
+function rangoTexto(valores: number[], formatear: (n: number) => string): string {
+  const min = Math.min(...valores)
+  const max = Math.max(...valores)
+  return min === max ? formatear(min) : `${formatear(min)} – ${formatear(max)}`
+}
+
 /** Precio de venta sugerido por margen de ganancia, calculado sobre el PRECIO DE VENTA
  * (Costo / (1 - Margen/100)) — es la convención de indumentaria: un margen de 40% significa que
  * el costo es el 60% del precio final, no que el precio es el costo + 40%. Redondeo según la
@@ -122,6 +143,18 @@ export function ArticulosPage() {
   })
   const [filasVariantes, setFilasVariantes] = useState<FilaVariante[]>([FILA_VARIANTE_VACIA])
   const [errorVariantes, setErrorVariantes] = useState<string | null>(null)
+  // Si no es null, el diálogo de arriba está agregando variante(s) a un grupo YA existente
+  // (Código/Descripción/Familia vienen fijos, no se pueden tocar acá) en vez de armar un
+  // producto nuevo desde cero.
+  const [grupoOrigen, setGrupoOrigen] = useState<GrupoArticulos | null>(null)
+
+  // Agrupa el listado por Código + Descripción + Familia — todas las variantes de una misma
+  // prenda quedan juntas bajo un desplegable. Con el flag apagado no tiene sentido (cada
+  // artículo ya es único por código), así que ahí queda deshabilitado.
+  const [gruposExpandidos, setGruposExpandidos] = useState<Record<string, boolean>>({})
+  const [grupoEnEdicion, setGrupoEnEdicion] = useState<GrupoArticulos | null>(null)
+  const [formGrupo, setFormGrupo] = useState({ descripcion: '', idFamilia: 0 })
+  const [errorGrupo, setErrorGrupo] = useState<string | null>(null)
 
   const articulosQuery = useQuery({ queryKey: ARTICULOS_QUERY_KEY, queryFn: () => articulosApi.search() })
   const familiasQuery = useQuery({ queryKey: ['familias'], queryFn: () => familiasApi.search() })
@@ -141,6 +174,32 @@ export function ArticulosPage() {
       (a) => a.codigo.toLowerCase().includes(texto) || (a.descripcion ?? '').toLowerCase().includes(texto),
     )
   }, [articulosQuery.data, busqueda])
+
+  const grupos = useMemo<GrupoArticulos[]>(() => {
+    if (!permiteCodigoCompartidoEntreArticulos) {
+      // Sin el flag, cada artículo es su propio grupo — el listado se comporta exactamente
+      // como antes (ver renderizado más abajo, que no muestra desplegable en ese caso).
+      return filtrados.map((a) => ({
+        clave: String(a.id),
+        codigo: a.codigo,
+        descripcion: a.descripcion ?? '',
+        idFamilia: a.idFamilia,
+        articulos: [a],
+      }))
+    }
+    const mapa = new Map<string, GrupoArticulos>()
+    for (const a of filtrados) {
+      const clave = `${a.codigo}||${(a.descripcion ?? '').trim().toLowerCase()}||${a.idFamilia}`
+      const existente = mapa.get(clave)
+      if (existente) existente.articulos.push(a)
+      else mapa.set(clave, { clave, codigo: a.codigo, descripcion: a.descripcion ?? '', idFamilia: a.idFamilia, articulos: [a] })
+    }
+    return Array.from(mapa.values())
+  }, [filtrados, permiteCodigoCompartidoEntreArticulos])
+
+  function alternarGrupo(clave: string) {
+    setGruposExpandidos((prev) => ({ ...prev, [clave]: !(prev[clave] ?? !!busqueda.trim()) }))
+  }
 
   const guardarMutation = useMutation({
     mutationFn: () =>
@@ -254,11 +313,78 @@ export function ArticulosPage() {
   }
 
   function abrirNuevoConVariantes() {
+    setGrupoOrigen(null)
     setBaseVariantes({ codigo: '', descripcion: '', idFamilia: 0, costo: 0, precio: 0, margenGanancia: undefined })
     setFilasVariantes([FILA_VARIANTE_VACIA])
     setErrorVariantes(null)
     setDialogVariantesAbierto(true)
   }
+
+  /** Suma una o más variantes (talla/color) a un grupo que ya existe — Código, Descripción y
+   * Familia quedan fijos (son los del grupo), solo se completa lo que cambia. */
+  function abrirAgregarVariante(grupo: GrupoArticulos) {
+    const base = grupo.articulos[0]
+    setGrupoOrigen(grupo)
+    setBaseVariantes({
+      codigo: grupo.codigo,
+      descripcion: grupo.descripcion,
+      idFamilia: grupo.idFamilia,
+      costo: base.costo,
+      precio: base.precio,
+      margenGanancia: base.margenGanancia ?? undefined,
+    })
+    setFilasVariantes([FILA_VARIANTE_VACIA])
+    setErrorVariantes(null)
+    setDialogVariantesAbierto(true)
+  }
+
+  function abrirEditarGrupo(grupo: GrupoArticulos) {
+    setGrupoEnEdicion(grupo)
+    setFormGrupo({ descripcion: grupo.descripcion, idFamilia: grupo.idFamilia })
+    setErrorGrupo(null)
+  }
+
+  function cerrarEditarGrupo() {
+    setGrupoEnEdicion(null)
+  }
+
+  const editarGrupoMutation = useMutation({
+    mutationFn: async () => {
+      if (!grupoEnEdicion) return
+      const resultados = await Promise.allSettled(
+        grupoEnEdicion.articulos.map((a) =>
+          articulosApi.update(a.id, {
+            codigo: a.codigo,
+            descripcion: formGrupo.descripcion,
+            tamano: a.tamano,
+            unidadMedida: a.unidadMedida ?? '',
+            fraccion: a.fraccion,
+            precio: a.precio,
+            costo: a.costo,
+            precioUnidadSuelta: a.precioUnidadSuelta ?? undefined,
+            margenGanancia: a.margenGanancia ?? undefined,
+            stockMinimo: a.stockMinimo ?? undefined,
+            stockIdeal: a.stockIdeal ?? undefined,
+            imagen: a.imagen ?? '',
+            idFamilia: formGrupo.idFamilia,
+            idPromocion: a.idPromocion ?? undefined,
+            caracteristicas: a.caracteristicas,
+          }),
+        ),
+      )
+      const fallidas = resultados.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      if (fallidas.length > 0) {
+        throw new Error(
+          `No se pudieron actualizar ${fallidas.length} de ${grupoEnEdicion.articulos.length} variante(s). Primer error: ${getErrorMessage(fallidas[0].reason)}`,
+        )
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ARTICULOS_QUERY_KEY })
+      cerrarEditarGrupo()
+    },
+    onError: (err) => setErrorGrupo(getErrorMessage(err)),
+  })
 
   function cerrarDialogVariantes() {
     setDialogVariantesAbierto(false)
@@ -464,7 +590,7 @@ export function ArticulosPage() {
               </TableRow>
             )}
 
-            {!articulosQuery.isLoading && filtrados.length === 0 && (
+            {!articulosQuery.isLoading && grupos.length === 0 && (
               <TableRow>
                 <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">Sin artículos para mostrar.</Typography>
@@ -472,48 +598,135 @@ export function ArticulosPage() {
               </TableRow>
             )}
 
-            {filtrados.map((articulo) => (
-              <TableRow key={articulo.id} hover>
-                <TableCell>{articulo.codigo}</TableCell>
-                <TableCell>{articulo.descripcion || '—'}</TableCell>
-                <TableCell>{familiaPorId.get(articulo.idFamilia) ?? '—'}</TableCell>
-                <TableCell>{obtenerUbicacion(articulo) ?? '—'}</TableCell>
-                <TableCell align="right">{money(articulo.precio)}</TableCell>
-                <TableCell align="right">{articulo.costo.toFixed(2)}</TableCell>
-                <TableCell>
-                  {permiteCodigoCompartidoEntreArticulos ? resumenVariante(articulo) || '—' : articulo.estado}
-                </TableCell>
-                <TableCell align="right" sx={stickyActionsSx}>
-                  <IconButton
-                    size="small"
-                    title="Imprimir etiquetas con código de barras"
-                    onClick={() => {
-                      setArticuloParaEtiqueta(articulo)
-                      setCantidadEtiquetas('1')
-                    }}
-                  >
-                    <BarcodeIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton size="small" onClick={() => abrirEdicion(articulo)}>
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton size="small" title="Duplicar artículo" onClick={() => abrirDuplicado(articulo)}>
-                    <ContentCopyIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    color="error"
-                    disabled={eliminarMutation.isPending}
-                    onClick={() => {
-                      setErrorEliminar(null)
-                      setArticuloAEliminar(articulo)
-                    }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
+            {grupos.map((grupo) => {
+              // Grupo de una sola variante: se ve exactamente como una fila suelta de siempre
+              // (no hay nada que desplegar), pero si el negocio comparte código entre artículos
+              // igual ofrecemos "+ Variante" para poder sumarle otra talla/color más adelante.
+              if (grupo.articulos.length === 1) {
+                const articulo = grupo.articulos[0]
+                return (
+                  <TableRow key={grupo.clave} hover>
+                    <TableCell>{articulo.codigo}</TableCell>
+                    <TableCell>{articulo.descripcion || '—'}</TableCell>
+                    <TableCell>{familiaPorId.get(articulo.idFamilia) ?? '—'}</TableCell>
+                    <TableCell>{obtenerUbicacion(articulo) ?? '—'}</TableCell>
+                    <TableCell align="right">{money(articulo.precio)}</TableCell>
+                    <TableCell align="right">{articulo.costo.toFixed(2)}</TableCell>
+                    <TableCell>
+                      {permiteCodigoCompartidoEntreArticulos ? resumenVariante(articulo) || '—' : articulo.estado}
+                    </TableCell>
+                    <TableCell align="right" sx={stickyActionsSx}>
+                      <IconButton
+                        size="small"
+                        title="Imprimir etiquetas con código de barras"
+                        onClick={() => {
+                          setArticuloParaEtiqueta(articulo)
+                          setCantidadEtiquetas('1')
+                        }}
+                      >
+                        <BarcodeIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" title="Editar" onClick={() => abrirEdicion(articulo)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      {permiteCodigoCompartidoEntreArticulos ? (
+                        <IconButton size="small" title="Agregar variante (talla/color)" onClick={() => abrirAgregarVariante(grupo)}>
+                          <AddIcon fontSize="small" />
+                        </IconButton>
+                      ) : (
+                        <IconButton size="small" title="Duplicar artículo" onClick={() => abrirDuplicado(articulo)}>
+                          <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                      <IconButton
+                        size="small"
+                        color="error"
+                        disabled={eliminarMutation.isPending}
+                        onClick={() => {
+                          setErrorEliminar(null)
+                          setArticuloAEliminar(articulo)
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                )
+              }
+
+              // Grupo con varias variantes: una fila cabecera desplegable + una fila por
+              // variante cuando está expandido.
+              const expandido = gruposExpandidos[grupo.clave] ?? !!busqueda.trim()
+              const precios = grupo.articulos.map((a) => a.precio)
+              const costos = grupo.articulos.map((a) => a.costo)
+              return (
+                <Fragment key={grupo.clave}>
+                  <TableRow hover sx={{ '& td': { fontWeight: 600, backgroundColor: 'action.hover' } }}>
+                    <TableCell>
+                      <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+                        <IconButton size="small" onClick={() => alternarGrupo(grupo.clave)}>
+                          {expandido ? <KeyboardArrowDownIcon fontSize="small" /> : <KeyboardArrowRightIcon fontSize="small" />}
+                        </IconButton>
+                        {grupo.codigo}
+                      </Stack>
+                    </TableCell>
+                    <TableCell>{grupo.descripcion || '—'}</TableCell>
+                    <TableCell>{familiaPorId.get(grupo.idFamilia) ?? '—'}</TableCell>
+                    <TableCell>—</TableCell>
+                    <TableCell align="right">{rangoTexto(precios, money)}</TableCell>
+                    <TableCell align="right">{rangoTexto(costos, (n) => n.toFixed(2))}</TableCell>
+                    <TableCell>{grupo.articulos.length} variantes</TableCell>
+                    <TableCell align="right" sx={stickyActionsSx}>
+                      <IconButton size="small" title="Agregar variante (talla/color)" onClick={() => abrirAgregarVariante(grupo)}>
+                        <AddIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" title="Editar descripción/familia del grupo" onClick={() => abrirEditarGrupo(grupo)}>
+                        <DriveFileRenameOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+
+                  {expandido &&
+                    grupo.articulos.map((articulo) => (
+                      <TableRow key={articulo.id} hover>
+                        <TableCell sx={{ pl: 5 }} colSpan={3}>
+                          {resumenVariante(articulo) || '—'}
+                        </TableCell>
+                        <TableCell>{obtenerUbicacion(articulo) ?? '—'}</TableCell>
+                        <TableCell align="right">{money(articulo.precio)}</TableCell>
+                        <TableCell align="right">{articulo.costo.toFixed(2)}</TableCell>
+                        <TableCell>{articulo.estado}</TableCell>
+                        <TableCell align="right" sx={stickyActionsSx}>
+                          <IconButton
+                            size="small"
+                            title="Imprimir etiquetas con código de barras"
+                            onClick={() => {
+                              setArticuloParaEtiqueta(articulo)
+                              setCantidadEtiquetas('1')
+                            }}
+                          >
+                            <BarcodeIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" title="Editar" onClick={() => abrirEdicion(articulo)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            disabled={eliminarMutation.isPending}
+                            onClick={() => {
+                              setErrorEliminar(null)
+                              setArticuloAEliminar(articulo)
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </Fragment>
+              )
+            })}
           </TableBody>
         </Table>
       </TableContainer>
@@ -784,14 +997,14 @@ export function ArticulosPage() {
         fullWidth
         fullScreen={isMobile}
       >
-        <DialogTitle>Nuevo artículo</DialogTitle>
+        <DialogTitle>{grupoOrigen ? `Agregar variante — ${grupoOrigen.codigo}` : 'Nuevo artículo'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {errorVariantes && <Alert severity="error">{errorVariantes}</Alert>}
             <Alert severity="info">
-              Cargá los datos una sola vez y agregá abajo cada variante (talla, color, o lo que
-              corresponda) — se crea un Artículo por fila, todos con el mismo código. Arranca sin
-              stock: se carga después por Compras o Ajuste de stock.
+              {grupoOrigen
+                ? 'Código, Descripción y Familia son los del grupo (no se pueden cambiar acá). Agregá abajo la nueva talla/color — podés sumar más de una a la vez.'
+                : 'Cargá los datos una sola vez y agregá abajo cada variante (talla, color, o lo que corresponda) — se crea un Artículo por fila, todos con el mismo código. Arranca sin stock: se carga después por Compras o Ajuste de stock.'}
             </Alert>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 2fr' }, gap: 2 }}>
@@ -799,6 +1012,7 @@ export function ArticulosPage() {
                 label="Código"
                 required
                 fullWidth
+                disabled={!!grupoOrigen}
                 value={baseVariantes.codigo}
                 onChange={(e) => actualizarBaseVariantes('codigo', e.target.value)}
                 helperText="El mismo para todas las variantes de abajo."
@@ -806,6 +1020,7 @@ export function ArticulosPage() {
               <TextField
                 label="Descripción"
                 fullWidth
+                disabled={!!grupoOrigen}
                 value={baseVariantes.descripcion}
                 onChange={(e) => actualizarBaseVariantes('descripcion', e.target.value)}
               />
@@ -816,6 +1031,7 @@ export function ArticulosPage() {
               label="Familia"
               required
               fullWidth
+              disabled={!!grupoOrigen}
               value={baseVariantes.idFamilia || ''}
               onChange={(e) => actualizarBaseVariantes('idFamilia', Number(e.target.value))}
               sx={{ maxWidth: { sm: '50%' } }}
@@ -1030,6 +1246,49 @@ export function ArticulosPage() {
             }}
           >
             Imprimir
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!grupoEnEdicion} onClose={cerrarEditarGrupo} maxWidth="xs" fullWidth>
+        <DialogTitle>Editar grupo — {grupoEnEdicion?.codigo}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {errorGrupo && <Alert severity="error">{errorGrupo}</Alert>}
+            <Alert severity="info">
+              Se actualiza en las {grupoEnEdicion?.articulos.length} variantes de este grupo a la
+              vez (talla/color, precio, costo y stock de cada una no se tocan).
+            </Alert>
+            <TextField
+              label="Descripción"
+              fullWidth
+              value={formGrupo.descripcion}
+              onChange={(e) => setFormGrupo((prev) => ({ ...prev, descripcion: e.target.value }))}
+            />
+            <TextField
+              select
+              label="Familia"
+              required
+              fullWidth
+              value={formGrupo.idFamilia || ''}
+              onChange={(e) => setFormGrupo((prev) => ({ ...prev, idFamilia: Number(e.target.value) }))}
+            >
+              {(familiasQuery.data ?? []).map((f) => (
+                <MenuItem key={f.id} value={f.id}>
+                  {f.nombreFamilia}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cerrarEditarGrupo}>Cancelar</Button>
+          <Button
+            variant="contained"
+            disabled={editarGrupoMutation.isPending || formGrupo.idFamilia <= 0}
+            onClick={() => editarGrupoMutation.mutate()}
+          >
+            {editarGrupoMutation.isPending ? 'Guardando…' : 'Guardar'}
           </Button>
         </DialogActions>
       </Dialog>
