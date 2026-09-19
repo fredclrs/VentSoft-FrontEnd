@@ -705,6 +705,16 @@ export function ArticulosPage() {
                     <TableCell align="right">{rangoTexto(costos, (n) => n.toFixed(2))}</TableCell>
                     <TableCell>{grupo.articulos.length} variantes</TableCell>
                     <TableCell align="right" sx={stickyActionsSx}>
+                      <IconButton
+                        size="small"
+                        title="Imprimir etiquetas con código de barras (es el mismo para todas las variantes)"
+                        onClick={() => {
+                          setArticuloParaEtiqueta(grupo.articulos[0])
+                          setCantidadEtiquetas('1')
+                        }}
+                      >
+                        <BarcodeIcon fontSize="small" />
+                      </IconButton>
                       <IconButton size="small" title="Agregar variante (talla/color)" onClick={() => abrirAgregarVariante(grupo)}>
                         <AddIcon fontSize="small" />
                       </IconButton>
@@ -736,16 +746,6 @@ export function ArticulosPage() {
                         <TableCell align="right">{articulo.costo.toFixed(2)}</TableCell>
                         <TableCell>{articulo.estado}</TableCell>
                         <TableCell align="right" sx={stickyActionsSx}>
-                          <IconButton
-                            size="small"
-                            title="Imprimir etiquetas con código de barras"
-                            onClick={() => {
-                              setArticuloParaEtiqueta(articulo)
-                              setCantidadEtiquetas('1')
-                            }}
-                          >
-                            <BarcodeIcon fontSize="small" />
-                          </IconButton>
                           <IconButton size="small" title="Editar" onClick={() => abrirEdicion(articulo)}>
                             <EditIcon fontSize="small" />
                           </IconButton>
