@@ -442,7 +442,22 @@ export function VentasPage() {
   }
 
   return (
-    <Stack spacing={1.5}>
+    <Stack
+      spacing={1.5}
+      // Enter completa la venta parado en CUALQUIER lugar de la pantalla, siempre que ya se
+      // pueda registrar — no solo en los 3 campos con su propio atajo (escaneo/forma de
+      // pago/recibido). Se ignora si: 1) algún campo de más adentro ya lo manejó a su manera
+      // (Cliente/Artículo usan Enter para confirmar la opción resaltada del buscador — ahí
+      // llega acá con defaultPrevented ya en true, y no hay que pisarlo), o 2) es el campo Nota
+      // (multiline), donde Enter tiene que seguir escribiendo un salto de línea.
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' || e.defaultPrevented) return
+        if ((e.target as HTMLElement).tagName === 'TEXTAREA') return
+        if (!puedeRegistrar) return
+        e.preventDefault()
+        registrarMutation.mutate()
+      }}
+    >
       <Typography variant="h5" sx={{ fontWeight: 700 }}>
         Nueva venta
       </Typography>
@@ -598,7 +613,7 @@ export function VentasPage() {
               onChange={(e) => setImprimirComprobante(e.target.checked)}
             />
           }
-          label="Imprimir comprobante al guardar"
+          label="Imprimir comprobante al vender"
         />
         {imprimirComprobante && (
           <TextField
