@@ -522,7 +522,9 @@ export function VentasPage() {
             fullWidth
             value={recargoPorcentaje}
             onChange={setRecargoPorcentaje}
-            helperText={`+${money(totalConRecargo - total)} (a ${money(totalConRecargo)})`}
+            // El total con recargo ya se ve abajo ("Subtotal... + X% recargo" / "Total: ...") —
+            // acá solo hace falta cuánto suma, repetir el total de nuevo era información de más.
+            helperText={`Suma ${money(totalConRecargo - total)}`}
           />
         )}
       </Box>
