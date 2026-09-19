@@ -61,7 +61,7 @@ export function SelectorVariantes({ variantes, stockPorArticulo, onElegir, onCer
                   {resumenVariante(v)}
                 </Typography>
                 {ubicacion && (
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body1" sx={{ fontWeight: 700 }} color="text.secondary">
                     {ubicacion}
                   </Typography>
                 )}
