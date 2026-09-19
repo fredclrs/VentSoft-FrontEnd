@@ -842,6 +842,7 @@ export function VentasPage() {
           <Stack direction="row" spacing={1}>
             <Button
               variant="outlined"
+              color="warning"
               size="large"
               disabled={registrarMutation.isPending}
               onClick={cancelarVenta}
