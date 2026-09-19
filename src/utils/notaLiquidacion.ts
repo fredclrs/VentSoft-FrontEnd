@@ -116,7 +116,7 @@ export function imprimirNotaLiquidacion(data: NotaLiquidacionData) {
         <div class="totales">${totales}</div>
         ${data.nota ? `<div class="nota">${escapeHtml(data.nota)}</div>` : ''}
         <div class="footer">¡Gracias por su preferencia!</div>
-        <script>window.onload = () => { window.print(); };</script>
+        <script>window.onload = () => { window.print(); }; window.onafterprint = () => window.close();</script>
       </body>
     </html>
   `)

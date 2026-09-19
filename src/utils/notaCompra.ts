@@ -111,7 +111,7 @@ export function imprimirNotaCompra(data: NotaCompraData) {
         </div>
         ${data.nota ? `<div class="nota">${escapeHtml(data.nota)}</div>` : ''}
         <div class="footer">Documento interno — no válido como factura</div>
-        <script>window.onload = () => { window.print(); };</script>
+        <script>window.onload = () => { window.print(); }; window.onafterprint = () => window.close();</script>
       </body>
     </html>
   `)

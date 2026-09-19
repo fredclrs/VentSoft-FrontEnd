@@ -87,7 +87,7 @@ export function imprimirEtiquetaArticulo(articulo: EtiquetaArticulo, cantidad: n
       </head>
       <body>
         <div class="hoja">${hoja}</div>
-        <script>window.onload = () => { window.print(); };</script>
+        <script>window.onload = () => { window.print(); }; window.onafterprint = () => window.close();</script>
       </body>
     </html>
   `)

@@ -131,7 +131,7 @@ export function imprimirNotaDevolucion(data: NotaDevolucionData) {
 
         ${data.motivo ? `<div class="nota">${escapeHtml(data.motivo)}</div>` : ''}
         <div class="footer">¡Gracias por su preferencia!</div>
-        <script>window.onload = () => { window.print(); };</script>
+        <script>window.onload = () => { window.print(); }; window.onafterprint = () => window.close();</script>
       </body>
     </html>
   `)

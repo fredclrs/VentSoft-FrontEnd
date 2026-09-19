@@ -81,7 +81,7 @@ export function imprimirListado({ nombreNegocio, titulo, subtitulo, columnas, fi
           <tbody>${filasHtml}</tbody>
         </table>
         <div class="totales">${totalesHtml}</div>
-        <script>window.onload = () => { window.print(); };</script>
+        <script>window.onload = () => { window.print(); }; window.onafterprint = () => window.close();</script>
       </body>
     </html>
   `)
@@ -192,7 +192,7 @@ export function imprimirExtracto({ nombreNegocio, titulo, subtitulo, columnas, g
         ${subtitulo ? `<div class="subtitulo">${escapeHtml(subtitulo)}</div>` : ''}
         ${gruposHtml}
         <div class="totales">${totalesGeneralesHtml}</div>
-        <script>window.onload = () => { window.print(); };</script>
+        <script>window.onload = () => { window.print(); }; window.onafterprint = () => window.close();</script>
       </body>
     </html>
   `)
