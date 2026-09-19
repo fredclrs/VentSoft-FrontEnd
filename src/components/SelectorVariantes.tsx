@@ -57,16 +57,16 @@ export function SelectorVariantes({ variantes, stockPorArticulo, onElegir, onCer
                 onClick={() => onElegir(v)}
               >
                 <Chip label={i + 1} sx={{ minWidth: 32, fontSize: '1rem' }} />
-                <Typography variant="body1" sx={{ flexGrow: 1 }}>
+                <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
                   {resumenVariante(v)}
                 </Typography>
                 {ubicacion && (
-                  <Typography variant="body1" sx={{ fontWeight: 700 }} color="text.secondary">
+                  <Typography variant="h6" sx={{ fontWeight: 700 }} color="text.secondary">
                     {ubicacion}
                   </Typography>
                 )}
                 {stock !== undefined && (
-                  <Typography variant="body1" color={stock > 0 ? 'text.secondary' : 'error'}>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }} color={stock > 0 ? 'text.secondary' : 'error'}>
                     {stock > 0 ? `Stock: ${stock}` : 'Sin stock'}
                   </Typography>
                 )}
