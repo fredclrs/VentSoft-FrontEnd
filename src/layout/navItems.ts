@@ -51,6 +51,10 @@ export interface NavItem {
   icon: typeof SvgIcon
   /** Permiso puntual necesario para verlo (ver types/permisos.ts). Sin esto, es visible para cualquier usuario logueado. */
   permiso?: string
+  /** Existe específicamente para manejar deuda pendiente (Cobros/Liquidación dependen de que
+   * haya ventas a crédito; Pagos, de que haya compras a crédito) — sin esto no tiene sentido
+   * mostrarlo, porque nunca va a haber nada que hacer ahí. Ver Configuración → Datos del negocio. */
+  requiere?: 'ventaACredito' | 'compraACredito'
 }
 
 export interface NavModule {
@@ -75,9 +79,21 @@ export const homeItem: NavItem = { label: 'Inicio', path: '/', icon: HomeIcon }
 export function filtrarModulosPorPermiso(
   modules: NavModule[],
   tienePermiso: (permiso: string) => boolean,
+  creditoConfig: { permiteVentaACredito: boolean; permiteCompraACredito: boolean } = {
+    permiteVentaACredito: true,
+    permiteCompraACredito: true,
+  },
 ): NavModule[] {
   return modules
-    .map((m) => ({ ...m, items: m.items.filter((i) => !i.permiso || tienePermiso(i.permiso)) }))
+    .map((m) => ({
+      ...m,
+      items: m.items.filter((i) => {
+        if (i.permiso && !tienePermiso(i.permiso)) return false
+        if (i.requiere === 'ventaACredito' && !creditoConfig.permiteVentaACredito) return false
+        if (i.requiere === 'compraACredito' && !creditoConfig.permiteCompraACredito) return false
+        return true
+      }),
+    }))
     .filter((m) => m.items.length > 0)
 }
 
@@ -96,9 +112,21 @@ export const navModules: NavModule[] = [
     color: '#1565c0',
     items: [
       { label: 'Ventas', path: '/ventas', icon: PointOfSaleIcon, permiso: PERMISO_VENTAS },
-      { label: 'Cobros', path: '/cobros', icon: RequestQuoteIcon, permiso: PERMISO_COBROS },
-      { label: 'Entregas (pago en especie)', path: '/entregas', icon: AgricultureIcon, permiso: PERMISO_ENTREGAS },
-      { label: 'Liquidación', path: '/liquidacion', icon: GavelIcon, permiso: PERMISO_LIQUIDACIONES },
+      { label: 'Cobros', path: '/cobros', icon: RequestQuoteIcon, permiso: PERMISO_COBROS, requiere: 'ventaACredito' },
+      {
+        label: 'Entregas (pago en especie)',
+        path: '/entregas',
+        icon: AgricultureIcon,
+        permiso: PERMISO_ENTREGAS,
+        requiere: 'ventaACredito',
+      },
+      {
+        label: 'Liquidación',
+        path: '/liquidacion',
+        icon: GavelIcon,
+        permiso: PERMISO_LIQUIDACIONES,
+        requiere: 'ventaACredito',
+      },
       { label: 'Clientes', path: '/clientes', icon: PeopleIcon, permiso: PERMISO_VENTAS },
     ],
   },
@@ -110,7 +138,7 @@ export const navModules: NavModule[] = [
     color: '#ef6c00',
     items: [
       { label: 'Compras', path: '/compras', icon: ShoppingCartIcon, permiso: PERMISO_COMPRAS },
-      { label: 'Pagos', path: '/pagos', icon: PaymentsIcon, permiso: PERMISO_PAGOS },
+      { label: 'Pagos', path: '/pagos', icon: PaymentsIcon, permiso: PERMISO_PAGOS, requiere: 'compraACredito' },
       { label: 'Proveedores', path: '/proveedores', icon: LocalShippingIcon, permiso: PERMISO_COMPRAS },
     ],
   },
@@ -161,8 +189,20 @@ export const navModules: NavModule[] = [
       { label: 'Stock actual', path: '/reportes/stock-actual', icon: Inventory2OutlinedIcon },
       { label: 'Stock bajo', path: '/reportes/stock-bajo', icon: WarningAmberIcon },
       { label: 'Lotes por vencer', path: '/reportes/lotes-por-vencer', icon: EventBusyIcon },
-      { label: 'Cuentas por cobrar', path: '/reportes/cuentas-por-cobrar', icon: AccountBalanceWalletIcon, permiso: PERMISO_CUENTAS_POR_COBRAR },
-      { label: 'Cuentas por pagar', path: '/reportes/cuentas-por-pagar', icon: PriceCheckIcon, permiso: PERMISO_CUENTAS_POR_PAGAR },
+      {
+        label: 'Cuentas por cobrar',
+        path: '/reportes/cuentas-por-cobrar',
+        icon: AccountBalanceWalletIcon,
+        permiso: PERMISO_CUENTAS_POR_COBRAR,
+        requiere: 'ventaACredito',
+      },
+      {
+        label: 'Cuentas por pagar',
+        path: '/reportes/cuentas-por-pagar',
+        icon: PriceCheckIcon,
+        permiso: PERMISO_CUENTAS_POR_PAGAR,
+        requiere: 'compraACredito',
+      },
     ],
   },
 ]

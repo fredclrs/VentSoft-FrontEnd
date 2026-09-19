@@ -30,7 +30,7 @@ const TRANSITION_MS = 225
 
 export function AppLayout() {
   const { usuario, logout, tienePermiso } = useAuth()
-  const { nombreNegocio } = useConfiguracionEmpresa()
+  const { nombreNegocio, permiteVentaACredito, permiteCompraACredito } = useConfiguracionEmpresa()
   const navigate = useNavigate()
   const location = useLocation()
   const theme = useTheme()
@@ -38,8 +38,13 @@ export function AppLayout() {
 
   // Un usuario no ve los ítems para los que no tiene el permiso puntual — el candado real
   // está en el backend ([Authorize(Roles=...)]), esto es solo para no mostrarle algo a lo
-  // que igual no puede entrar (y RequirePermiso corta el paso si escribe la URL a mano).
-  const modulosVisibles = useMemo(() => filtrarModulosPorPermiso(navModules, tienePermiso), [tienePermiso])
+  // que igual no puede entrar (y RequirePermiso corta el paso si escribe la URL a mano). De
+  // paso, si el negocio no vende/compra a crédito, tampoco tiene sentido mostrar las pantallas
+  // que solo sirven para manejar deuda pendiente (Cobros, Pagos, Liquidación, etc.).
+  const modulosVisibles = useMemo(
+    () => filtrarModulosPorPermiso(navModules, tienePermiso, { permiteVentaACredito, permiteCompraACredito }),
+    [tienePermiso, permiteVentaACredito, permiteCompraACredito],
+  )
 
   // El menú arranca abierto en escritorio y cerrado (overlay) en mobile; el botón de
   // tres rayas lo oculta/muestra por completo, como en cualquier sistema de gestión.

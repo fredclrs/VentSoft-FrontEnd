@@ -9,15 +9,20 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { filtrarModulosPorPermiso, navModules } from '../layout/navItems'
 import { useAuth } from '../auth/AuthContext'
+import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import { getStockBajo } from '../api/articulos'
 import { PERMISO_CUENTAS_POR_COBRAR, PERMISO_CUENTAS_POR_PAGAR } from '../types/permisos'
 
 export function DashboardPage() {
   const { usuario, tienePermiso } = useAuth()
+  const { permiteVentaACredito, permiteCompraACredito } = useConfiguracionEmpresa()
   const navigate = useNavigate()
 
   const stockBajoQuery = useQuery({ queryKey: ['reportes', 'stockBajo'], queryFn: getStockBajo })
-  const modulosVisibles = filtrarModulosPorPermiso(navModules, tienePermiso)
+  const modulosVisibles = filtrarModulosPorPermiso(navModules, tienePermiso, {
+    permiteVentaACredito,
+    permiteCompraACredito,
+  })
 
   const resumen = [
     {
@@ -25,10 +30,10 @@ export function DashboardPage() {
       value: stockBajoQuery.isLoading ? '…' : (stockBajoQuery.data?.length ?? 0),
       path: '/reportes/stock-bajo',
     },
-    ...(tienePermiso(PERMISO_CUENTAS_POR_COBRAR)
+    ...(tienePermiso(PERMISO_CUENTAS_POR_COBRAR) && permiteVentaACredito
       ? [{ label: 'Cuentas por cobrar', value: 'Ver reporte', path: '/reportes/cuentas-por-cobrar' }]
       : []),
-    ...(tienePermiso(PERMISO_CUENTAS_POR_PAGAR)
+    ...(tienePermiso(PERMISO_CUENTAS_POR_PAGAR) && permiteCompraACredito
       ? [{ label: 'Cuentas por pagar', value: 'Ver reporte', path: '/reportes/cuentas-por-pagar' }]
       : []),
     { label: 'Lotes por vencer', value: 'Ver reporte', path: '/reportes/lotes-por-vencer' },
