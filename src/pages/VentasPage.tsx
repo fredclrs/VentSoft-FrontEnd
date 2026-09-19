@@ -528,20 +528,16 @@ export function VentasPage() {
               setIdFormaDePago(id)
               const forma = (formasDePagoQuery.data ?? []).find((f) => f.id === id)
               setRecargoPorcentaje(forma?.porcentajeRecargo ?? 0)
+              // El Select de MUI trata el Enter como "abrir el desplegable" apenas queda
+              // cerrado con foco — es un comportamiento propio de MUI que no se puede frenar
+              // del todo desde afuera (ni con preventDefault/stopPropagation). En vez de pelear
+              // contra eso, se manda el foco al cuadro de escaneo apenas se elige: de ahí un
+              // Enter con el cuadro vacío ya sabe completar la venta (o el atajo global de más
+              // arriba), sin que quede nunca un Enter cayéndole al desplegable cerrado.
+              setTimeout(() => scanInputRef.current?.focus(), 100)
             }}
             error={!idFormaDePago}
             helperText={!idFormaDePago ? 'Elegí cómo se cobra' : undefined}
-            // Al elegir la forma de pago, muchas veces ya queda todo listo para vender (sobre
-            // todo en una venta rápida de un solo artículo) — un Enter ahí mismo la registra,
-            // sin tener que ir a buscar el botón. stopPropagation además del preventDefault:
-            // sin eso, el Select de MUI igual reabría su propio desplegable con ese mismo Enter.
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && puedeRegistrar) {
-                e.preventDefault()
-                e.stopPropagation()
-                registrarMutation.mutate()
-              }
-            }}
           >
             {(formasDePagoQuery.data ?? []).map((f) => (
               <MenuItem key={f.id} value={f.id}>
