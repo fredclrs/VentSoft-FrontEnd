@@ -343,6 +343,12 @@ export function VentasPage() {
     onError: (err) => setErrorMutacion(getErrorMessage(err)),
   })
 
+  // Misma condición que deshabilita el botón "Registrar venta" — se reutiliza para poder
+  // completar la venta apretando Enter en el cuadro de escaneo (ver handleScanKeyDown), sin
+  // tocar el mouse.
+  const puedeRegistrar =
+    !registrarMutation.isPending && !!cliente && lineas.length > 0 && !(mostrarRecibido && !idFormaDePago)
+
   /** Agrega el artículo a la venta; si ya había un renglón de ese artículo en el MISMO modo
    * (paquete o suelto), suma una unidad ahí en vez de duplicar el renglón. */
   function agregarOIncrementarLinea(articulo: Articulo, modo: ModoVentaCompra = 'caja') {
@@ -404,7 +410,12 @@ export function VentasPage() {
     if (e.key !== 'Enter') return
     e.preventDefault()
     const codigo = codigoEscaneado.trim()
-    if (!codigo) return
+    // Enter con el cuadro vacío (ya escaneaste lo que hacía falta, volvés a apretar Enter sin
+    // escanear nada más) y la venta ya se puede registrar: la registra directo, sin mouse.
+    if (!codigo) {
+      if (puedeRegistrar) registrarMutation.mutate()
+      return
+    }
 
     setVariantesParaElegir(null)
     const coincidencias = (articulosQuery.data ?? []).filter(
@@ -852,7 +863,7 @@ export function VentasPage() {
             <Button
               variant="contained"
               size="large"
-              disabled={registrarMutation.isPending || !cliente || lineas.length === 0 || (mostrarRecibido && !idFormaDePago)}
+              disabled={!puedeRegistrar}
               onClick={() => registrarMutation.mutate()}
             >
               {registrarMutation.isPending ? 'Registrando…' : 'Registrar venta'}
