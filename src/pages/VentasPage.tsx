@@ -516,6 +516,15 @@ export function VentasPage() {
             }}
             error={!idFormaDePago}
             helperText={!idFormaDePago ? 'Elegí cómo se cobra' : undefined}
+            // Al elegir la forma de pago, muchas veces ya queda todo listo para vender (sobre
+            // todo en una venta rápida de un solo artículo) — un Enter ahí mismo la registra,
+            // sin tener que ir a buscar el botón.
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && puedeRegistrar) {
+                e.preventDefault()
+                registrarMutation.mutate()
+              }
+            }}
           >
             {(formasDePagoQuery.data ?? []).map((f) => (
               <MenuItem key={f.id} value={f.id}>
