@@ -526,7 +526,7 @@ export function VentasPage() {
         </Alert>
       )}
 
-      <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
         <FormControlLabel
           control={
             <Checkbox
@@ -581,10 +581,19 @@ export function VentasPage() {
             error={vuelto !== null && vuelto < 0}
             sx={{ width: 200 }}
             placeholder="Con cuánto paga"
-            // Sin texto de ayuda hasta que cargue un monto: "Opcional: con cuánto paga el
-            // cliente" ocupaba 2 líneas y desalineaba esta fila con los checkboxes.
-            helperText={vuelto === null ? undefined : vuelto >= 0 ? `Vuelto: ${money(vuelto)}` : `Falta ${money(-vuelto)}`}
+            // Sin texto de ayuda: "Opcional: con cuánto paga el cliente" ocupaba 2 líneas y
+            // desalineaba esta fila con los checkboxes. El Vuelto/Falta se muestra al lado,
+            // no acá abajo — ver más abajo.
           />
+        )}
+        {vuelto !== null && (
+          <Typography
+            variant="body1"
+            sx={{ fontWeight: 700, alignSelf: 'center' }}
+            color={vuelto >= 0 ? 'success.main' : 'error.main'}
+          >
+            {vuelto >= 0 ? `Vuelto: ${money(vuelto)}` : `Falta ${money(-vuelto)}`}
+          </Typography>
         )}
       </Stack>
 
