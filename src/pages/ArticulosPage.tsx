@@ -155,6 +155,8 @@ export function ArticulosPage() {
   const [grupoEnEdicion, setGrupoEnEdicion] = useState<GrupoArticulos | null>(null)
   const [formGrupo, setFormGrupo] = useState({ descripcion: '', idFamilia: 0 })
   const [errorGrupo, setErrorGrupo] = useState<string | null>(null)
+  const [grupoAEliminar, setGrupoAEliminar] = useState<GrupoArticulos | null>(null)
+  const [errorEliminarGrupo, setErrorEliminarGrupo] = useState<string | null>(null)
 
   const articulosQuery = useQuery({ queryKey: ARTICULOS_QUERY_KEY, queryFn: () => articulosApi.search() })
   const familiasQuery = useQuery({ queryKey: ['familias'], queryFn: () => familiasApi.search() })
@@ -386,6 +388,27 @@ export function ArticulosPage() {
     onError: (err) => setErrorGrupo(getErrorMessage(err)),
   })
 
+  /** Baja lógica de todas las variantes del grupo de una sola vez — mismo criterio que borrar
+   * un artículo suelto (no se pierde el historial, solo dejan de poder elegirse en operaciones
+   * nuevas), pero sin tener que entrar variante por variante. */
+  const eliminarGrupoMutation = useMutation({
+    mutationFn: async () => {
+      if (!grupoAEliminar) return
+      const resultados = await Promise.allSettled(grupoAEliminar.articulos.map((a) => articulosApi.remove(a.id)))
+      const fallidas = resultados.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      if (fallidas.length > 0) {
+        throw new Error(
+          `No se pudieron eliminar ${fallidas.length} de ${grupoAEliminar.articulos.length} variante(s). Primer error: ${getErrorMessage(fallidas[0].reason)}`,
+        )
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ARTICULOS_QUERY_KEY })
+      setGrupoAEliminar(null)
+    },
+    onError: (err) => setErrorEliminarGrupo(getErrorMessage(err)),
+  })
+
   function cerrarDialogVariantes() {
     setDialogVariantesAbierto(false)
   }
@@ -564,6 +587,11 @@ export function ArticulosPage() {
           {errorEliminar}
         </Alert>
       )}
+      {errorEliminarGrupo && (
+        <Alert severity="error" onClose={() => setErrorEliminarGrupo(null)}>
+          {errorEliminarGrupo}
+        </Alert>
+      )}
 
       <TableContainer component={Paper} variant="outlined">
         <Table size="small">
@@ -682,6 +710,17 @@ export function ArticulosPage() {
                       </IconButton>
                       <IconButton size="small" title="Editar descripción/familia del grupo" onClick={() => abrirEditarGrupo(grupo)}>
                         <DriveFileRenameOutlineIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        title="Eliminar todas las variantes de este grupo"
+                        onClick={() => {
+                          setErrorEliminarGrupo(null)
+                          setGrupoAEliminar(grupo)
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
                       </IconButton>
                     </TableCell>
                   </TableRow>
@@ -1300,6 +1339,15 @@ export function ArticulosPage() {
         confirmando={eliminarMutation.isPending}
         onConfirmar={() => articuloAEliminar && eliminarMutation.mutate(articuloAEliminar.id)}
         onCancelar={() => setArticuloAEliminar(null)}
+      />
+
+      <ConfirmDialog
+        open={!!grupoAEliminar}
+        titulo="Eliminar grupo"
+        mensaje={`¿Seguro que querés eliminar las ${grupoAEliminar?.articulos.length} variantes de "${grupoAEliminar?.codigo} — ${grupoAEliminar?.descripcion}"? No se borra su historial de compras/ventas, solo dejan de aparecer para elegirlas en operaciones nuevas.`}
+        confirmando={eliminarGrupoMutation.isPending}
+        onConfirmar={() => eliminarGrupoMutation.mutate()}
+        onCancelar={() => setGrupoAEliminar(null)}
       />
     </Stack>
   )
