@@ -518,10 +518,12 @@ export function VentasPage() {
             helperText={!idFormaDePago ? 'Elegí cómo se cobra' : undefined}
             // Al elegir la forma de pago, muchas veces ya queda todo listo para vender (sobre
             // todo en una venta rápida de un solo artículo) — un Enter ahí mismo la registra,
-            // sin tener que ir a buscar el botón.
+            // sin tener que ir a buscar el botón. stopPropagation además del preventDefault:
+            // sin eso, el Select de MUI igual reabría su propio desplegable con ese mismo Enter.
             onKeyDown={(e) => {
               if (e.key === 'Enter' && puedeRegistrar) {
                 e.preventDefault()
+                e.stopPropagation()
                 registrarMutation.mutate()
               }
             }}
@@ -627,6 +629,12 @@ export function VentasPage() {
               placeholder="Con cuánto paga"
               // Sin texto de ayuda: "Opcional: con cuánto paga el cliente" ocupaba 2 líneas y
               // desalineaba esta fila con los checkboxes. El Vuelto/Falta se muestra al lado.
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && puedeRegistrar) {
+                  e.preventDefault()
+                  registrarMutation.mutate()
+                }
+              }}
             />
             {vuelto !== null && (
               <Typography variant="body1" sx={{ fontWeight: 700 }} color={vuelto >= 0 ? 'success.main' : 'error.main'}>
