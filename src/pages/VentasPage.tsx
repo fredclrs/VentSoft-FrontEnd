@@ -27,6 +27,7 @@ import BarcodeIcon from '@mui/icons-material/BarcodeReader'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
 import { SelectorVariantes } from '../components/SelectorVariantes'
 import { CampoNumero } from '../components/CampoNumero'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { imprimirNotaVenta } from '../utils/notaVenta'
 import type { FormatoImpresion } from '../utils/notaVenta'
@@ -103,6 +104,7 @@ export function VentasPage() {
   const [variantesParaElegir, setVariantesParaElegir] = useState<Articulo[] | null>(null)
   const [errorMutacion, setErrorMutacion] = useState<string | null>(null)
   const [avisoExito, setAvisoExito] = useState<string | null>(null)
+  const [confirmarCancelar, setConfirmarCancelar] = useState(false)
   const scanInputRef = useRef<HTMLInputElement>(null)
 
   // Solo para resolver código/descripción al agregar por escaneo; no es historial.
@@ -251,6 +253,22 @@ export function VentasPage() {
     setErrorEscaneo(null)
     setErrorMutacion(null)
     setTimeout(() => scanInputRef.current?.focus(), 100)
+  }
+
+  /** "Cancelar venta": si no hay nada cargado todavía, resetea directo sin preguntar nada — no
+   * hay nada que se pueda perder. Si ya hay artículos en el carrito, primero confirma (mismo
+   * criterio que Devolución/Cambio al descartar un cambio cargado). */
+  function cancelarVenta() {
+    if (lineas.length === 0) {
+      resetearVenta()
+      return
+    }
+    setConfirmarCancelar(true)
+  }
+
+  function confirmarCancelarVenta() {
+    resetearVenta()
+    setConfirmarCancelar(false)
   }
 
   const registrarMutation = useMutation({
@@ -819,16 +837,36 @@ export function VentasPage() {
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             Total: {money(totalConRecargo)}
           </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            disabled={registrarMutation.isPending || !cliente || lineas.length === 0 || (mostrarRecibido && !idFormaDePago)}
-            onClick={() => registrarMutation.mutate()}
-          >
-            {registrarMutation.isPending ? 'Registrando…' : 'Registrar venta'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              size="large"
+              disabled={registrarMutation.isPending}
+              onClick={cancelarVenta}
+            >
+              Cancelar venta
+            </Button>
+            <Button
+              variant="contained"
+              size="large"
+              disabled={registrarMutation.isPending || !cliente || lineas.length === 0 || (mostrarRecibido && !idFormaDePago)}
+              onClick={() => registrarMutation.mutate()}
+            >
+              {registrarMutation.isPending ? 'Registrando…' : 'Registrar venta'}
+            </Button>
+          </Stack>
         </Stack>
       </Box>
+
+      <ConfirmDialog
+        open={confirmarCancelar}
+        titulo="Cancelar venta"
+        mensaje={`Tenés ${lineas.length} artículo(s) cargado(s) en el carrito. Si cancelás, se pierden y no queda ningún registro. ¿Seguro?`}
+        confirmarLabel="Sí, cancelar"
+        cancelarLabel="Seguir cargando"
+        onConfirmar={confirmarCancelarVenta}
+        onCancelar={() => setConfirmarCancelar(false)}
+      />
 
       <Snackbar
         open={!!avisoExito}
