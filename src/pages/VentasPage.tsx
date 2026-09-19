@@ -572,28 +572,28 @@ export function VentasPage() {
           </TextField>
         )}
         {mostrarRecibido && (
-          <TextField
-            label="Recibido"
-            type="number"
-            size="small"
-            value={recibido}
-            onChange={(e) => setRecibido(e.target.value)}
-            error={vuelto !== null && vuelto < 0}
-            sx={{ width: 200 }}
-            placeholder="Con cuánto paga"
-            // Sin texto de ayuda: "Opcional: con cuánto paga el cliente" ocupaba 2 líneas y
-            // desalineaba esta fila con los checkboxes. El Vuelto/Falta se muestra al lado,
-            // no acá abajo — ver más abajo.
-          />
-        )}
-        {vuelto !== null && (
-          <Typography
-            variant="body1"
-            sx={{ fontWeight: 700, alignSelf: 'center' }}
-            color={vuelto >= 0 ? 'success.main' : 'error.main'}
-          >
-            {vuelto >= 0 ? `Vuelto: ${money(vuelto)}` : `Falta ${money(-vuelto)}`}
-          </Typography>
+          // Agrupados en su propio Stack (no dos hijos sueltos del Stack de afuera) para que
+          // viajen siempre juntos: si no entran en la fila y el "wrap" los manda a la línea de
+          // abajo, bajan LOS DOS juntos — nunca se separan entre sí.
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <TextField
+              label="Recibido"
+              type="number"
+              size="small"
+              value={recibido}
+              onChange={(e) => setRecibido(e.target.value)}
+              error={vuelto !== null && vuelto < 0}
+              sx={{ width: 150 }}
+              placeholder="Con cuánto paga"
+              // Sin texto de ayuda: "Opcional: con cuánto paga el cliente" ocupaba 2 líneas y
+              // desalineaba esta fila con los checkboxes. El Vuelto/Falta se muestra al lado.
+            />
+            {vuelto !== null && (
+              <Typography variant="body1" sx={{ fontWeight: 700 }} color={vuelto >= 0 ? 'success.main' : 'error.main'}>
+                {vuelto >= 0 ? `Vuelto: ${money(vuelto)}` : `Falta ${money(-vuelto)}`}
+              </Typography>
+            )}
+          </Stack>
         )}
       </Stack>
 
