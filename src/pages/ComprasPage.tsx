@@ -429,6 +429,7 @@ export function ComprasPage() {
           onChange={(a) => {
             setArticuloParaAgregar(a)
             setModoParaAgregar('caja')
+            setErrorEscaneo(null)
           }}
         />
         <Button
@@ -451,6 +452,7 @@ export function ComprasPage() {
           variantes={variantesParaElegir}
           stockPorArticulo={stockPorArticulo}
           onElegir={elegirVariante}
+          onCerrar={() => setVariantesParaElegir(null)}
         />
       )}
 

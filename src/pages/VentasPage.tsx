@@ -423,7 +423,14 @@ export function VentasPage() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: mostrarRecibido ? '2fr 1fr 1fr 1fr 1fr 1fr' : '2fr 1fr 1fr 1fr' },
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: !mostrarRecibido
+              ? '2fr 1fr 1fr 1fr'
+              : formaDePagoSeleccionada?.porcentajeRecargo
+                ? '2fr 1fr 1fr 1fr 1fr 1fr'
+                : '2fr 1fr 1fr 1fr 1fr',
+          },
           gap: 1.5,
         }}
       >
@@ -488,6 +495,8 @@ export function VentasPage() {
             ))}
           </TextField>
         )}
+        {/* Solo con formas de pago que tienen % de recargo configurado (no es exclusivo de
+            Transferencia — cualquiera que lo tenga cargado en Configuración → Formas de pago). */}
         {mostrarRecibido && !!formaDePagoSeleccionada?.porcentajeRecargo && (
           <CampoNumero
             label="% de recargo"
@@ -495,25 +504,7 @@ export function VentasPage() {
             fullWidth
             value={recargoPorcentaje}
             onChange={setRecargoPorcentaje}
-            helperText={`Suma ${money(totalConRecargo - total)} (de ${money(total)} a ${money(totalConRecargo)}) — lo podés ajustar.`}
-          />
-        )}
-        {mostrarRecibido && (
-          <TextField
-            label="Recibido"
-            type="number"
-            size="small"
-            fullWidth
-            value={recibido}
-            onChange={(e) => setRecibido(e.target.value)}
-            error={vuelto !== null && vuelto < 0}
-            helperText={
-              vuelto === null
-                ? 'Opcional: con cuánto paga el cliente'
-                : vuelto >= 0
-                  ? `Vuelto: ${money(vuelto)}`
-                  : `Falta ${money(-vuelto)}`
-            }
+            helperText={`+${money(totalConRecargo - total)} (a ${money(totalConRecargo)})`}
           />
         )}
       </Box>
@@ -580,6 +571,24 @@ export function VentasPage() {
             <MenuItem value="hoja">Hoja completa (A4/Carta)</MenuItem>
           </TextField>
         )}
+        {mostrarRecibido && (
+          <TextField
+            label="Recibido"
+            type="number"
+            size="small"
+            value={recibido}
+            onChange={(e) => setRecibido(e.target.value)}
+            error={vuelto !== null && vuelto < 0}
+            sx={{ width: 200 }}
+            helperText={
+              vuelto === null
+                ? 'Opcional: con cuánto paga el cliente'
+                : vuelto >= 0
+                  ? `Vuelto: ${money(vuelto)}`
+                  : `Falta ${money(-vuelto)}`
+            }
+          />
+        )}
       </Stack>
 
       <Divider />
@@ -624,6 +633,7 @@ export function VentasPage() {
           onChange={(a) => {
             setArticuloParaAgregar(a)
             setModoParaAgregar('caja')
+            setErrorEscaneo(null)
           }}
         />
         <Button
@@ -646,6 +656,7 @@ export function VentasPage() {
           variantes={variantesParaElegir}
           stockPorArticulo={stockPorArticulo}
           onElegir={elegirVariante}
+          onCerrar={() => setVariantesParaElegir(null)}
         />
       )}
 
