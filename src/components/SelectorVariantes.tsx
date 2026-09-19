@@ -3,7 +3,7 @@ import Chip from '@mui/material/Chip'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
-import { resumenVariante } from '../utils/articulo'
+import { obtenerUbicacion, resumenVariante } from '../utils/articulo'
 import type { Articulo } from '../types/articulo'
 
 interface SelectorVariantesProps {
@@ -41,6 +41,7 @@ export function SelectorVariantes({ variantes, stockPorArticulo, onElegir, onCer
         <Stack spacing={0.75}>
           {variantes.map((v, i) => {
             const stock = stockPorArticulo?.get(v.id)
+            const ubicacion = obtenerUbicacion(v)
             return (
               <Stack
                 key={v.id}
@@ -59,6 +60,11 @@ export function SelectorVariantes({ variantes, stockPorArticulo, onElegir, onCer
                 <Typography variant="body1" sx={{ flexGrow: 1 }}>
                   {resumenVariante(v)}
                 </Typography>
+                {ubicacion && (
+                  <Typography variant="body2" color="text.secondary">
+                    {ubicacion}
+                  </Typography>
+                )}
                 {stock !== undefined && (
                   <Typography variant="body1" color={stock > 0 ? 'text.secondary' : 'error'}>
                     {stock > 0 ? `Stock: ${stock}` : 'Sin stock'}
