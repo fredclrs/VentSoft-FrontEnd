@@ -571,25 +571,28 @@ export function VentasPage() {
             <MenuItem value="hoja">Hoja completa (A4/Carta)</MenuItem>
           </TextField>
         )}
-        {mostrarRecibido && (
-          <TextField
-            label="Recibido"
-            type="number"
-            size="small"
-            value={recibido}
-            onChange={(e) => setRecibido(e.target.value)}
-            error={vuelto !== null && vuelto < 0}
-            sx={{ width: 200 }}
-            helperText={
-              vuelto === null
-                ? 'Opcional: con cuánto paga el cliente'
-                : vuelto >= 0
-                  ? `Vuelto: ${money(vuelto)}`
-                  : `Falta ${money(-vuelto)}`
-            }
-          />
-        )}
       </Stack>
+
+      {/* Aparte de la fila de Contado/Imprimir/Formato a propósito: el texto de ayuda de acá
+          abajo suele ocupar 2 líneas y desalineaba esa fila con los checkboxes. */}
+      {mostrarRecibido && (
+        <TextField
+          label="Recibido"
+          type="number"
+          size="small"
+          value={recibido}
+          onChange={(e) => setRecibido(e.target.value)}
+          error={vuelto !== null && vuelto < 0}
+          sx={{ width: 260 }}
+          helperText={
+            vuelto === null
+              ? 'Opcional: con cuánto paga el cliente'
+              : vuelto >= 0
+                ? `Vuelto: ${money(vuelto)}`
+                : `Falta ${money(-vuelto)}`
+          }
+        />
+      )}
 
       <Divider />
 
