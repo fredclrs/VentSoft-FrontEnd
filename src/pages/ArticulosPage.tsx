@@ -39,6 +39,7 @@ import { promocionesApi } from '../api/promociones'
 import { caracteristicasApi } from '../api/caracteristicas'
 import { getErrorMessage } from '../api/errors'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ErrorDialog } from '../components/ErrorDialog'
 import { CampoNumero } from '../components/CampoNumero'
 import { imprimirEtiquetaArticulo } from '../utils/barcode'
 import { obtenerUbicacion, resumenVariante } from '../utils/articulo'
@@ -1331,6 +1332,9 @@ export function ArticulosPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ErrorDialog mensaje={errorMutacion} onCerrar={() => setErrorMutacion(null)} />
+      <ErrorDialog mensaje={errorVariantes} onCerrar={() => setErrorVariantes(null)} />
 
       <ConfirmDialog
         open={!!articuloAEliminar}
