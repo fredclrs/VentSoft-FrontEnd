@@ -25,7 +25,12 @@ export function SelectorVariantes({ variantes, stockPorArticulo, onElegir }: Sel
   return (
     <Paper variant="outlined" sx={{ p: 1.5 }}>
       <Typography variant="body2" sx={{ mb: 1 }}>
-        Elegí la variante de "{variantes[0].codigo}" (o apretá el número):
+        Elegí la variante de{' '}
+        <strong>
+          {variantes[0].codigo}
+          {variantes[0].descripcion ? ` — ${variantes[0].descripcion}` : ''}
+        </strong>{' '}
+        (o apretá el número):
       </Typography>
       <Stack spacing={0.5}>
         {variantes.map((v, i) => {

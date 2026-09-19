@@ -26,6 +26,7 @@ import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EntityAutocomplete } from './EntityAutocomplete'
+import { CampoNumero } from './CampoNumero'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { articulosApi, buscarArticulos, getStockTodos } from '../api/articulos'
 import { getDevolucionesByVenta, registrarDevolucion } from '../api/devoluciones'
@@ -313,7 +314,9 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
                   const seDevuelve = (Number(cantidades[d.id]) || 0) > 0
                   return (
                     <TableRow key={d.id}>
-                      <TableCell>{articulo ? `${articulo.codigo} — ${articulo.descripcion ?? ''}` : `#${d.idArticulo}`}</TableCell>
+                      <TableCell>
+                        {articulo ? etiquetaArticulo(articulo, permiteCodigoCompartidoEntreArticulos) : `#${d.idArticulo}`}
+                      </TableCell>
                       <TableCell align="right">{d.cantidad}</TableCell>
                       <TableCell align="right">{disp}</TableCell>
                       <TableCell align="right" sx={{ width: 120 }}>
@@ -408,29 +411,24 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
                     <TableBody>
                       {articulosNuevos.map((l, index) => (
                         <TableRow key={l.articulo.id}>
-                          <TableCell>{l.articulo.codigo} — {l.articulo.descripcion}</TableCell>
+                          <TableCell>{etiquetaArticulo(l.articulo, permiteCodigoCompartidoEntreArticulos)}</TableCell>
                           <TableCell align="right" sx={{ width: 100 }}>
-                            <TextField
+                            <CampoNumero
                               size="small"
-                              type="number"
                               value={l.cantidad}
-                              onChange={(e) =>
-                                setArticulosNuevos((prev) =>
-                                  prev.map((x, i) => (i === index ? { ...x, cantidad: Number(e.target.value) } : x)),
-                                )
+                              valorVacio={1}
+                              onChange={(cantidad) =>
+                                setArticulosNuevos((prev) => prev.map((x, i) => (i === index ? { ...x, cantidad } : x)))
                               }
                               slotProps={{ htmlInput: { min: 1, style: { textAlign: 'right' } } }}
                             />
                           </TableCell>
                           <TableCell align="right" sx={{ width: 120 }}>
-                            <TextField
+                            <CampoNumero
                               size="small"
-                              type="number"
                               value={l.precioUnitario}
-                              onChange={(e) =>
-                                setArticulosNuevos((prev) =>
-                                  prev.map((x, i) => (i === index ? { ...x, precioUnitario: Number(e.target.value) } : x)),
-                                )
+                              onChange={(precioUnitario) =>
+                                setArticulosNuevos((prev) => prev.map((x, i) => (i === index ? { ...x, precioUnitario } : x)))
                               }
                               slotProps={{ htmlInput: { style: { textAlign: 'right' } } }}
                             />

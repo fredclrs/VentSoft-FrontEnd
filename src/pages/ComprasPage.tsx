@@ -31,6 +31,7 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import BarcodeIcon from '@mui/icons-material/BarcodeReader'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
 import { SelectorVariantes } from '../components/SelectorVariantes'
+import { CampoNumero } from '../components/CampoNumero'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { fraccionDe, costoUnidadSueltaDe } from '../utils/fraccion'
 import type { ModoVentaCompra } from '../utils/fraccion'
@@ -94,6 +95,9 @@ export function ComprasPage() {
   const [preciosSugeridos, setPreciosSugeridos] = useState<PrecioSugerido[] | null>(null)
   // Por defecto todos marcados para aplicar — el cajero desmarca los que no quiere.
   const [preciosAceptados, setPreciosAceptados] = useState<Record<number, boolean>>({})
+  // El precio sugerido se puede redondear antes de confirmar (ej. 27500 -> 28000) — arranca
+  // igual al calculado, pero es editable; vacío = todavía no lo tocaron, usa el sugerido.
+  const [preciosEditados, setPreciosEditados] = useState<Record<number, number>>({})
   const [errorPrecios, setErrorPrecios] = useState<string | null>(null)
   const [avisosSinMargen, setAvisosSinMargen] = useState<AvisoSinMargen[] | null>(null)
   const [avisoExito, setAvisoExito] = useState<string | null>(null)
@@ -206,6 +210,7 @@ export function ComprasPage() {
       if (compra.preciosSugeridos.length > 0) {
         setPreciosSugeridos(compra.preciosSugeridos)
         setPreciosAceptados(Object.fromEntries(compra.preciosSugeridos.map((p) => [p.idArticulo, true])))
+        setPreciosEditados({})
       }
       if (compra.avisosSinMargen.length > 0) {
         setAvisosSinMargen(compra.avisosSinMargen)
@@ -218,12 +223,15 @@ export function ComprasPage() {
   const aplicarPreciosMutation = useMutation({
     mutationFn: async () => {
       const aceptados = (preciosSugeridos ?? []).filter((p) => preciosAceptados[p.idArticulo])
-      await Promise.all(aceptados.map((p) => actualizarPrecioArticulo(p.idArticulo, p.precioSugerido)))
+      await Promise.all(
+        aceptados.map((p) => actualizarPrecioArticulo(p.idArticulo, preciosEditados[p.idArticulo] ?? p.precioSugerido)),
+      )
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['articulos'] })
       setPreciosSugeridos(null)
       setPreciosAceptados({})
+      setPreciosEditados({})
     },
     onError: (err) => setErrorPrecios(getErrorMessage(err)),
   })
@@ -490,9 +498,7 @@ export function ComprasPage() {
             )}
             {lineas.map((linea, index) => (
               <TableRow key={index}>
-                <TableCell>
-                  {linea.articulo.codigo} — {linea.articulo.descripcion}
-                </TableCell>
+                <TableCell>{etiquetaArticulo(linea.articulo, permiteCodigoCompartidoEntreArticulos)}</TableCell>
                 {hayFraccionados && (
                   <TableCell>
                     {fraccionDe(linea.articulo) > 1 ? (
@@ -507,20 +513,19 @@ export function ComprasPage() {
                   </TableCell>
                 )}
                 <TableCell align="right" sx={{ width: 100 }}>
-                  <TextField
+                  <CampoNumero
                     size="small"
-                    type="number"
                     value={linea.cantidad}
-                    onChange={(e) => actualizarLinea(index, { cantidad: Number(e.target.value) })}
+                    valorVacio={1}
+                    onChange={(cantidad) => actualizarLinea(index, { cantidad })}
                     slotProps={{ htmlInput: { min: 1, style: { textAlign: 'right' } } }}
                   />
                 </TableCell>
                 <TableCell align="right" sx={{ width: 120 }}>
-                  <TextField
+                  <CampoNumero
                     size="small"
-                    type="number"
                     value={linea.costoUnitario}
-                    onChange={(e) => actualizarLinea(index, { costoUnitario: Number(e.target.value) })}
+                    onChange={(costoUnitario) => actualizarLinea(index, { costoUnitario })}
                     slotProps={{ htmlInput: { style: { textAlign: 'right' } } }}
                   />
                 </TableCell>
@@ -582,6 +587,7 @@ export function ComprasPage() {
         onClose={() => {
           setPreciosSugeridos(null)
           setPreciosAceptados({})
+          setPreciosEditados({})
         }}
         maxWidth="xs"
         fullWidth
@@ -589,8 +595,10 @@ export function ComprasPage() {
         <DialogTitle>Precios sugeridos por margen de ganancia</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 1 }}>
-            Estos artículos tienen un margen configurado y su costo cambió — así quedaría el
-            precio de venta según ese margen. Desmarcá los que no quieras aplicar.
+            La compra ya se guardó — esto es aparte, para decidir si también actualizás el precio
+            de venta. Estos artículos tienen un margen configurado y su costo cambió, así que este
+            sería el nuevo precio según ese margen. Desmarcá los que no quieras actualizar, o
+            ajustá el número si preferís redondearlo a un precio cerrado.
           </DialogContentText>
           {errorPrecios && <Alert severity="error">{errorPrecios}</Alert>}
           <Stack spacing={1}>
@@ -606,9 +614,17 @@ export function ComprasPage() {
                 <Typography variant="body2" sx={{ flexGrow: 1 }}>
                   {p.codigo}
                 </Typography>
-                <Typography variant="body2">
-                  {money(p.precioActual)} → <strong>{money(p.precioSugerido)}</strong>
+                <Typography variant="caption" color="text.secondary">
+                  {money(p.precioActual)} →
                 </Typography>
+                <CampoNumero
+                  size="small"
+                  value={preciosEditados[p.idArticulo] ?? p.precioSugerido}
+                  disabled={!(preciosAceptados[p.idArticulo] ?? true)}
+                  onChange={(valor) => setPreciosEditados((prev) => ({ ...prev, [p.idArticulo]: valor }))}
+                  sx={{ width: 110 }}
+                  slotProps={{ htmlInput: { style: { textAlign: 'right' } } }}
+                />
               </Stack>
             ))}
           </Stack>
@@ -618,9 +634,10 @@ export function ComprasPage() {
             onClick={() => {
               setPreciosSugeridos(null)
               setPreciosAceptados({})
+              setPreciosEditados({})
             }}
           >
-            Rechazar todos
+            Mantener precios actuales
           </Button>
           <Button
             variant="contained"

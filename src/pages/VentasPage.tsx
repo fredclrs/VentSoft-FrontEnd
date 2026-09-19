@@ -26,6 +26,7 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import BarcodeIcon from '@mui/icons-material/BarcodeReader'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
 import { SelectorVariantes } from '../components/SelectorVariantes'
+import { CampoNumero } from '../components/CampoNumero'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { imprimirNotaVenta } from '../utils/notaVenta'
 import type { FormatoImpresion } from '../utils/notaVenta'
@@ -83,6 +84,9 @@ export function VentasPage() {
   const [nota, setNota] = useState('')
   const [pagado, setPagado] = useState('0')
   const [idFormaDePago, setIdFormaDePago] = useState<number | ''>('')
+  // Recargo (%) por la forma de pago elegida (ej. Transferencia) — se sugiere solo desde el %
+  // configurado en esa forma de pago, pero se puede ajustar acá para esta venta puntual.
+  const [recargoPorcentaje, setRecargoPorcentaje] = useState(0)
   const [montoSaldoAFavor, setMontoSaldoAFavor] = useState('0')
   const [recibido, setRecibido] = useState('')
   const [contado, setContado] = useState(false)
@@ -105,6 +109,7 @@ export function VentasPage() {
   const articulosQuery = useQuery({ queryKey: ['articulos'], queryFn: () => articulosApi.search() })
 
   const formasDePagoQuery = useQuery({ queryKey: ['formasDePago'], queryFn: () => formasDePagoApi.search() })
+  const formaDePagoSeleccionada = (formasDePagoQuery.data ?? []).find((f) => f.id === idFormaDePago)
 
   // Stock de todo el catálogo, para poder mostrar "sin stock" y bloquear el agregado antes de
   // llegar a registrar la venta (el backend igual lo vuelve a validar al confirmar).
@@ -149,6 +154,9 @@ export function VentasPage() {
   }
 
   const total = useMemo(() => lineas.reduce((acc, l) => acc + l.cantidad * l.precioUnitario, 0), [lineas])
+  // Recargo aplicado sobre el total completo (no solo lo que se cobra ahora) — así la deuda
+  // pendiente de una venta a crédito también queda con el recargo incluido.
+  const totalConRecargo = total * (1 + recargoPorcentaje / 100)
 
   // La columna "Vendido por" solo se muestra si hay al menos un artículo que se vende por
   // paquete — el resto de los negocios (ropa, ferretería, etc.) nunca la ve.
@@ -156,7 +164,7 @@ export function VentasPage() {
 
   // Tope de saldo a favor aplicable: no más de lo que tiene el cliente, ni más de lo que
   // hace falta pagar (no tiene sentido "sobre-aplicar" crédito a una venta más chica).
-  const saldoAFavorMax = Math.min(cliente?.saldoAFavor ?? 0, total)
+  const saldoAFavorMax = Math.min(cliente?.saldoAFavor ?? 0, totalConRecargo)
 
   // Si cambia el cliente o el total baja, el monto a aplicar nunca puede quedar por
   // encima de lo disponible.
@@ -201,7 +209,7 @@ export function VentasPage() {
   // (y lo mantiene al día si cambia el total o el saldo aplicado). Con el checkbox
   // destildado el monto se escribe a mano, pero igual lo topamos a que nunca quede
   // pagando de más si sacás un artículo y el total baja de lo tipeado.
-  const restaPorPagar = Math.max(0, total - (Number(montoSaldoAFavor) || 0))
+  const restaPorPagar = Math.max(0, totalConRecargo - (Number(montoSaldoAFavor) || 0))
   useEffect(() => {
     if (contadoEfectivo) {
       setPagado(String(restaPorPagar))
@@ -233,6 +241,7 @@ export function VentasPage() {
     setNota('')
     setPagado('0')
     setIdFormaDePago('')
+    setRecargoPorcentaje(0)
     setMontoSaldoAFavor('0')
     setRecibido('')
     setLineas([])
@@ -266,6 +275,7 @@ export function VentasPage() {
         idUsuario: usuario.id,
         pagado: Number(pagado) || 0,
         idFormaDePago: idFormaDePago || undefined,
+        recargoPorcentaje: recargoPorcentaje || undefined,
         montoSaldoAFavorAplicado: Number(montoSaldoAFavor) || 0,
         detalles,
       })
@@ -462,7 +472,12 @@ export function VentasPage() {
             size="small"
             fullWidth
             value={idFormaDePago}
-            onChange={(e) => setIdFormaDePago(e.target.value ? Number(e.target.value) : '')}
+            onChange={(e) => {
+              const id = e.target.value ? Number(e.target.value) : ''
+              setIdFormaDePago(id)
+              const forma = (formasDePagoQuery.data ?? []).find((f) => f.id === id)
+              setRecargoPorcentaje(forma?.porcentajeRecargo ?? 0)
+            }}
             error={!idFormaDePago}
             helperText={!idFormaDePago ? 'Elegí cómo se cobra' : undefined}
           >
@@ -472,6 +487,16 @@ export function VentasPage() {
               </MenuItem>
             ))}
           </TextField>
+        )}
+        {mostrarRecibido && !!formaDePagoSeleccionada?.porcentajeRecargo && (
+          <CampoNumero
+            label="% de recargo"
+            size="small"
+            fullWidth
+            value={recargoPorcentaje}
+            onChange={setRecargoPorcentaje}
+            helperText={`Suma ${money(totalConRecargo - total)} (de ${money(total)} a ${money(totalConRecargo)}) — lo podés ajustar.`}
+          />
         )}
         {mostrarRecibido && (
           <TextField
@@ -701,7 +726,7 @@ export function VentasPage() {
               return (
                 <TableRow key={index}>
                   <TableCell>
-                    {linea.articulo.codigo} — {linea.articulo.descripcion}
+                    {etiquetaArticulo(linea.articulo, permiteCodigoCompartidoEntreArticulos)}
                   </TableCell>
                   <TableCell>{obtenerUbicacion(linea.articulo) ?? '—'}</TableCell>
                   {hayFraccionados && (
@@ -726,12 +751,11 @@ export function VentasPage() {
                     )}
                   </TableCell>
                   <TableCell align="right" sx={{ width: 110 }}>
-                    <TextField
+                    <CampoNumero
                       size="small"
-                      type="number"
                       value={linea.cantidad}
-                      onChange={(e) => {
-                        const valor = Number(e.target.value) || 0
+                      valorVacio={1}
+                      onChange={(valor) => {
                         // Nunca por encima del stock del artículo (convertido a la unidad de
                         // este renglón: paquetes o sueltas) — igual que antes, ahora en unidades reales.
                         const tope = stockQuery.data ? maxParaEsteRenglon : Infinity
@@ -747,11 +771,10 @@ export function VentasPage() {
                     />
                   </TableCell>
                   <TableCell align="right" sx={{ width: 130 }}>
-                    <TextField
+                    <CampoNumero
                       size="small"
-                      type="number"
                       value={linea.precioUnitario}
-                      onChange={(e) => actualizarLinea(index, { precioUnitario: Number(e.target.value) })}
+                      onChange={(precioUnitario) => actualizarLinea(index, { precioUnitario })}
                       slotProps={{ htmlInput: { style: { textAlign: 'right' } } }}
                     />
                   </TableCell>
@@ -771,8 +794,13 @@ export function VentasPage() {
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr' }, gap: 2, alignItems: 'end' }}>
         <TextField label="Nota" size="small" fullWidth multiline minRows={1} value={nota} onChange={(e) => setNota(e.target.value)} />
         <Stack spacing={1} sx={{ alignItems: { xs: 'stretch', sm: 'flex-end' } }}>
+          {recargoPorcentaje > 0 && (
+            <Typography variant="caption" color="text.secondary">
+              Subtotal: {money(total)} + {recargoPorcentaje}% recargo
+            </Typography>
+          )}
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            Total: {money(total)}
+            Total: {money(totalConRecargo)}
           </Typography>
           <Button
             variant="contained"

@@ -193,7 +193,7 @@ export function ConfiguracionEmpresaPage() {
               />
               <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mt: -0.5 }}>
                 {permiteCodigoCompartidoEntreArticulos
-                  ? 'Pensado para indumentaria: una misma prenda en varias tallas/colores puede usar un solo código impreso. Al escanear un código con varias coincidencias, se elige cuál es.'
+                  ? 'Para cuando el proveedor imprime un solo código para varias variantes de un mismo producto (ej. distintas tallas/colores de una prenda, o distintos tintes de una pintura) en vez de uno por variante. Al escanear un código con varias coincidencias, se elige cuál es.'
                   : 'El código de barras tiene que ser único por artículo, como es lo normal en la mayoría de los rubros.'}
               </Typography>
             </div>

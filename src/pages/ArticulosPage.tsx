@@ -36,8 +36,9 @@ import { promocionesApi } from '../api/promociones'
 import { caracteristicasApi } from '../api/caracteristicas'
 import { getErrorMessage } from '../api/errors'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { CampoNumero } from '../components/CampoNumero'
 import { imprimirEtiquetaArticulo } from '../utils/barcode'
-import { obtenerUbicacion } from '../utils/articulo'
+import { obtenerUbicacion, resumenVariante } from '../utils/articulo'
 import { stickyActionsSx } from '../utils/tableStyles'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
@@ -193,8 +194,8 @@ export function ArticulosPage() {
   }
 
   /** Precarga el alta con los datos de un artículo existente (marca, familia, precio, etc.) para
-   * no volver a tipear todo cuando lo único que cambia es la talla/color — el caso típico de
-   * indumentaria. Código y tamaño quedan vacíos porque son justo lo que hay que cambiar. */
+   * no volver a tipear todo cuando lo único que cambia es la variante (talla/color u otra). Código
+   * y tamaño quedan vacíos porque son justo lo que hay que cambiar. */
   function abrirDuplicado(articulo: Articulo) {
     setArticuloEnEdicion(null)
     setEsDuplicado(true)
@@ -267,6 +268,10 @@ export function ArticulosPage() {
     setBaseVariantes((prev) => ({ ...prev, [campo]: valor }))
   }
 
+  function actualizarFilaVariante(index: number, cambios: Partial<FilaVariante>) {
+    setFilasVariantes((prev) => prev.map((f, i) => (i === index ? { ...f, ...cambios } : f)))
+  }
+
   function quitarFilaVariante(index: number) {
     setFilasVariantes((prev) => prev.filter((_, i) => i !== index))
   }
@@ -319,14 +324,19 @@ export function ArticulosPage() {
     return fila.costoOverride ?? baseVariantes.costo
   }
 
-  /** Si hay Margen configurado, el precio de cada fila SIEMPRE se calcula solo a partir de su
-   * propio costo (igual que en el alta normal) — no admite override manual en ese caso. Sin
-   * Margen, es el default de arriba salvo que se haya tocado esa fila puntual. */
+  /** Si la fila tiene su propio precio (lo tocaron a mano), ese manda siempre. Si no:
+   * - Mismo costo que el de arriba (no tocaron el costo de ESTA fila) → usa el precio de
+   *   arriba tal cual esté (calculado con margen, o ajustado a mano — es el mismo campo para
+   *   los dos casos, así una fila nueva agregada después también lo hereda).
+   * - Costo propio y distinto (ej. la talla más grande, que cuesta un poco más) → se calcula
+   *   con margen a partir de SU costo, porque el precio de arriba ya no le corresponde. */
   function precioEfectivo(fila: FilaVariante): number {
+    if (fila.precioOverride != null) return fila.precioOverride
+    if (fila.costoOverride == null) return baseVariantes.precio
     if (baseVariantes.margenGanancia != null && baseVariantes.margenGanancia < 100) {
       return calcularPrecioPorMargen(costoEfectivo(fila), baseVariantes.margenGanancia, redondearPreciosEnteros)
     }
-    return fila.precioOverride ?? baseVariantes.precio
+    return baseVariantes.precio
   }
 
   const camposObligatoriosVariantesCompletos =
@@ -396,16 +406,13 @@ export function ArticulosPage() {
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           Artículos
         </Typography>
-        <Stack direction="row" spacing={1}>
-          {permiteCodigoCompartidoEntreArticulos && (
-            <Button startIcon={<AddIcon />} variant="outlined" onClick={abrirNuevoConVariantes}>
-              Nuevo producto (variantes)
-            </Button>
-          )}
-          <Button startIcon={<AddIcon />} variant="contained" onClick={abrirNuevo}>
-            Nuevo artículo
-          </Button>
-        </Stack>
+        <Button
+          startIcon={<AddIcon />}
+          variant="contained"
+          onClick={permiteCodigoCompartidoEntreArticulos ? abrirNuevoConVariantes : abrirNuevo}
+        >
+          Nuevo artículo
+        </Button>
       </Stack>
 
       <TextField
@@ -442,7 +449,7 @@ export function ArticulosPage() {
               <TableCell>Ubicación</TableCell>
               <TableCell align="right">Precio</TableCell>
               <TableCell align="right">Costo</TableCell>
-              <TableCell>Estado</TableCell>
+              <TableCell>{permiteCodigoCompartidoEntreArticulos ? 'Variante' : 'Estado'}</TableCell>
               <TableCell align="right" sx={stickyActionsSx}>
                 Acciones
               </TableCell>
@@ -473,7 +480,9 @@ export function ArticulosPage() {
                 <TableCell>{obtenerUbicacion(articulo) ?? '—'}</TableCell>
                 <TableCell align="right">{money(articulo.precio)}</TableCell>
                 <TableCell align="right">{articulo.costo.toFixed(2)}</TableCell>
-                <TableCell>{articulo.estado}</TableCell>
+                <TableCell>
+                  {permiteCodigoCompartidoEntreArticulos ? resumenVariante(articulo) || '—' : articulo.estado}
+                </TableCell>
                 <TableCell align="right" sx={stickyActionsSx}>
                   <IconButton
                     size="small"
@@ -597,28 +606,24 @@ export function ArticulosPage() {
             </Box>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
-              <TextField
+              <CampoNumero
                 label="Precio de venta"
-                type="number"
                 fullWidth
-                disabled={form.margenGanancia != null}
                 value={form.precio}
-                onChange={(e) => actualizarCampo('precio', Number(e.target.value))}
+                onChange={(precio) => actualizarCampo('precio', precio)}
                 helperText={
                   form.margenGanancia != null
-                    ? 'Se calcula solo por el margen de ganancia'
+                    ? 'Calculado con el margen — lo podés ajustar (ej. redondearlo a un precio cerrado).'
                     : form.fraccion > 1
                       ? 'Precio del paquete completo'
                       : undefined
                 }
               />
-              <TextField
+              <CampoNumero
                 label="Costo"
-                type="number"
                 fullWidth
                 value={form.costo}
-                onChange={(e) => {
-                  const nuevoCosto = Number(e.target.value)
+                onChange={(nuevoCosto) => {
                   actualizarCampo('costo', nuevoCosto)
                   if (form.margenGanancia != null) {
                     actualizarCampo('precio', calcularPrecioPorMargen(nuevoCosto, form.margenGanancia, redondearPreciosEnteros))
@@ -656,7 +661,7 @@ export function ArticulosPage() {
                   form.margenGanancia != null && form.margenGanancia >= 100
                     ? 'Tiene que ser menor a 100 (es sobre el precio de venta: el costo es el (100 - margen)% del precio).'
                     : form.margenGanancia != null
-                      ? 'El precio de venta se recalcula solo cada vez que compres este artículo y el costo cambie — no hace falta tocarlo a mano.'
+                      ? 'El precio de venta se recalcula solo cada vez que compres este artículo y el costo cambie — podés ajustarlo igual (ej. redondearlo).'
                       : 'Si lo dejás vacío, el precio de venta sigue siendo 100% manual, como siempre.'
                 }
               />
@@ -779,14 +784,14 @@ export function ArticulosPage() {
         fullWidth
         fullScreen={isMobile}
       >
-        <DialogTitle>Nuevo producto (variantes)</DialogTitle>
+        <DialogTitle>Nuevo artículo</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {errorVariantes && <Alert severity="error">{errorVariantes}</Alert>}
             <Alert severity="info">
-              Cargá los datos una sola vez y agregá abajo cada talla/color — se crea un Artículo
-              por fila, todos con el mismo código. Arranca sin stock: se carga después por
-              Compras o Ajuste de stock.
+              Cargá los datos una sola vez y agregá abajo cada variante (talla, color, o lo que
+              corresponda) — se crea un Artículo por fila, todos con el mismo código. Arranca sin
+              stock: se carga después por Compras o Ajuste de stock.
             </Alert>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 2fr' }, gap: 2 }}>
@@ -833,26 +838,28 @@ export function ArticulosPage() {
             </TextField>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
-              <TextField
+              <CampoNumero
                 label="Costo (por defecto)"
-                type="number"
                 fullWidth
                 value={baseVariantes.costo}
-                onChange={(e) => actualizarBaseVariantes('costo', Number(e.target.value))}
+                onChange={(costo) => {
+                  actualizarBaseVariantes('costo', costo)
+                  if (baseVariantes.margenGanancia != null && baseVariantes.margenGanancia < 100) {
+                    actualizarBaseVariantes('precio', calcularPrecioPorMargen(costo, baseVariantes.margenGanancia, redondearPreciosEnteros))
+                  }
+                }}
                 helperText="Cada fila puede pisarlo."
               />
-              <TextField
+              <CampoNumero
                 label="Precio de venta (por defecto)"
-                type="number"
                 fullWidth
-                disabled={baseVariantes.margenGanancia != null}
-                value={
-                  baseVariantes.margenGanancia != null && baseVariantes.margenGanancia < 100
-                    ? calcularPrecioPorMargen(baseVariantes.costo, baseVariantes.margenGanancia, redondearPreciosEnteros)
-                    : baseVariantes.precio
+                value={baseVariantes.precio}
+                onChange={(precio) => actualizarBaseVariantes('precio', precio)}
+                helperText={
+                  baseVariantes.margenGanancia != null
+                    ? 'Calculado con el margen — lo podés ajustar (ej. redondearlo a un precio cerrado).'
+                    : 'Cada fila puede pisarlo.'
                 }
-                onChange={(e) => actualizarBaseVariantes('precio', Number(e.target.value))}
-                helperText={baseVariantes.margenGanancia != null ? 'Se calcula solo por el margen' : 'Cada fila puede pisarlo.'}
               />
               <TextField
                 label="Margen de ganancia % (opcional)"
@@ -861,14 +868,18 @@ export function ArticulosPage() {
                 value={baseVariantes.margenGanancia ?? ''}
                 onChange={(e) => {
                   const valor = e.target.value
-                  actualizarBaseVariantes('margenGanancia', valor === '' ? undefined : Number(valor))
+                  const margen = valor === '' ? undefined : Number(valor)
+                  actualizarBaseVariantes('margenGanancia', margen)
+                  if (margen != null && margen < 100) {
+                    actualizarBaseVariantes('precio', calcularPrecioPorMargen(baseVariantes.costo, margen, redondearPreciosEnteros))
+                  }
                 }}
                 error={baseVariantes.margenGanancia != null && baseVariantes.margenGanancia >= 100}
                 slotProps={{ htmlInput: { min: 0, max: 99.99, step: 0.01 } }}
                 helperText={
                   baseVariantes.margenGanancia != null && baseVariantes.margenGanancia >= 100
                     ? 'Tiene que ser menor a 100.'
-                    : 'Si se carga, el precio de cada fila se calcula solo.'
+                    : 'Si se carga, el precio de cada fila se calcula solo (editable igual).'
                 }
               />
             </Box>
@@ -890,22 +901,19 @@ export function ArticulosPage() {
                 <Paper key={index} variant="outlined" sx={{ p: 1.5 }}>
                   <Stack spacing={1}>
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr auto' }, gap: 1.5, alignItems: 'flex-start' }}>
-                      <TextField
+                      <CampoNumero
                         label="Costo"
-                        type="number"
                         size="small"
                         fullWidth
                         value={costoEfectivo(fila)}
-                        onChange={(e) => actualizarFilaVariante(index, { costoOverride: Number(e.target.value) })}
+                        onChange={(costo) => actualizarFilaVariante(index, { costoOverride: costo })}
                       />
-                      <TextField
+                      <CampoNumero
                         label="Precio"
-                        type="number"
                         size="small"
                         fullWidth
-                        disabled={baseVariantes.margenGanancia != null}
                         value={precioEfectivo(fila)}
-                        onChange={(e) => actualizarFilaVariante(index, { precioOverride: Number(e.target.value) })}
+                        onChange={(precio) => actualizarFilaVariante(index, { precioOverride: precio })}
                       />
                       <IconButton
                         size="small"

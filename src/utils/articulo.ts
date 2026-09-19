@@ -33,12 +33,26 @@ export function obtenerUbicacion(articulo: Pick<Articulo, 'caracteristicas'>): s
  * comparten el mismo código de barras — ver ConfiguracionEmpresa.PermiteCodigoCompartidoEntreArticulos.
  * Junta el Tamaño con el resto de las características (sin Ubicación, que no hace a la variante
  * en sí, solo a dónde está guardada). Ej: "40 · Azul".
+ *
+ * El Tamaño puede repetir un valor que también está cargado como Característica — en un
+ * artículo creado en "Nuevo producto (variantes)" el Tamaño se arma automáticamente uniendo las
+ * características (ver tamanoDeFila en ArticulosPage), pero también puede pasar a mano: cargaron
+ * una Característica "Talla" con el mismo valor que ya habían tipeado en Tamaño, sin saber que
+ * es lo mismo. Cualquier característica cuyo valor ya aparezca en el Tamaño se descarta, sea
+ * una sola o todas, para no repetir texto (ej. "M · M · Negro" queda en "M · Negro").
  */
 export function resumenVariante(articulo: Pick<Articulo, 'tamano' | 'caracteristicas'>): string {
+  const partesTamano = articulo.tamano
+    .split('·')
+    .map((s) => normalizar(s.trim()))
+    .filter(Boolean)
+
   const otras = articulo.caracteristicas
     .filter((c) => normalizar(c.nombreCaracteristica ?? '') !== 'ubicacion')
-    .map((c) => c.valor)
+    .map((c) => c.valor.trim())
     .filter(Boolean)
+    .filter((valor) => !partesTamano.includes(normalizar(valor)))
+
   return [articulo.tamano, ...otras].filter(Boolean).join(' · ')
 }
 

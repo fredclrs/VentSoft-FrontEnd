@@ -22,6 +22,9 @@ export interface Venta {
   referencias?: string | null
   descuentoMonetario?: number | null
   descuentoPorcentaje?: number | null
+  /** Recargo (%) aplicado sobre el Total por la forma de pago elegida (ej. Transferencia).
+   * Null = sin recargo, como la gran mayoría de las ventas. */
+  recargoPorcentaje?: number | null
   total: number
   pagado: number
   porPagar: number
@@ -50,6 +53,9 @@ export interface RegistrarVenta {
   referencias?: string
   descuentoMonetario?: number
   descuentoPorcentaje?: number
+  /** Recargo (%) por la forma de pago elegida (ej. Transferencia), sugerido desde
+   * FormaDePago.porcentajeRecargo pero ajustable antes de confirmar. */
+  recargoPorcentaje?: number
   nota?: string
   idCliente: number
   idUsuario: number
