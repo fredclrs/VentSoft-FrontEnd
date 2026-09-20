@@ -141,6 +141,8 @@ export function ArticulosPage() {
     costo: 0,
     precio: 0,
     margenGanancia: undefined as number | undefined,
+    stockMinimo: undefined as number | undefined,
+    stockIdeal: undefined as number | undefined,
   })
   const [filasVariantes, setFilasVariantes] = useState<FilaVariante[]>([FILA_VARIANTE_VACIA])
   const [errorVariantes, setErrorVariantes] = useState<string | null>(null)
@@ -154,7 +156,12 @@ export function ArticulosPage() {
   // artículo ya es único por código), así que ahí queda deshabilitado.
   const [gruposExpandidos, setGruposExpandidos] = useState<Record<string, boolean>>({})
   const [grupoEnEdicion, setGrupoEnEdicion] = useState<GrupoArticulos | null>(null)
-  const [formGrupo, setFormGrupo] = useState({ descripcion: '', idFamilia: 0 })
+  const [formGrupo, setFormGrupo] = useState({
+    descripcion: '',
+    idFamilia: 0,
+    stockMinimo: undefined as number | undefined,
+    stockIdeal: undefined as number | undefined,
+  })
   const [errorGrupo, setErrorGrupo] = useState<string | null>(null)
   const [grupoAEliminar, setGrupoAEliminar] = useState<GrupoArticulos | null>(null)
   const [errorEliminarGrupo, setErrorEliminarGrupo] = useState<string | null>(null)
@@ -317,7 +324,16 @@ export function ArticulosPage() {
 
   function abrirNuevoConVariantes() {
     setGrupoOrigen(null)
-    setBaseVariantes({ codigo: '', descripcion: '', idFamilia: 0, costo: 0, precio: 0, margenGanancia: undefined })
+    setBaseVariantes({
+      codigo: '',
+      descripcion: '',
+      idFamilia: 0,
+      costo: 0,
+      precio: 0,
+      margenGanancia: undefined,
+      stockMinimo: undefined,
+      stockIdeal: undefined,
+    })
     setFilasVariantes([FILA_VARIANTE_VACIA])
     setErrorVariantes(null)
     setDialogVariantesAbierto(true)
@@ -335,6 +351,8 @@ export function ArticulosPage() {
       costo: base.costo,
       precio: base.precio,
       margenGanancia: base.margenGanancia ?? undefined,
+      stockMinimo: base.stockMinimo ?? undefined,
+      stockIdeal: base.stockIdeal ?? undefined,
     })
     setFilasVariantes([FILA_VARIANTE_VACIA])
     setErrorVariantes(null)
@@ -342,8 +360,14 @@ export function ArticulosPage() {
   }
 
   function abrirEditarGrupo(grupo: GrupoArticulos) {
+    const base = grupo.articulos[0]
     setGrupoEnEdicion(grupo)
-    setFormGrupo({ descripcion: grupo.descripcion, idFamilia: grupo.idFamilia })
+    setFormGrupo({
+      descripcion: grupo.descripcion,
+      idFamilia: grupo.idFamilia,
+      stockMinimo: base.stockMinimo ?? undefined,
+      stockIdeal: base.stockIdeal ?? undefined,
+    })
     setErrorGrupo(null)
   }
 
@@ -366,8 +390,8 @@ export function ArticulosPage() {
             costo: a.costo,
             precioUnidadSuelta: a.precioUnidadSuelta ?? undefined,
             margenGanancia: a.margenGanancia ?? undefined,
-            stockMinimo: a.stockMinimo ?? undefined,
-            stockIdeal: a.stockIdeal ?? undefined,
+            stockMinimo: formGrupo.stockMinimo,
+            stockIdeal: formGrupo.stockIdeal,
             imagen: a.imagen ?? '',
             idFamilia: formGrupo.idFamilia,
             idPromocion: a.idPromocion ?? undefined,
@@ -512,8 +536,8 @@ export function ArticulosPage() {
             costo: costoEfectivo(fila),
             precioUnidadSuelta: undefined,
             margenGanancia: baseVariantes.margenGanancia,
-            stockMinimo: undefined,
-            stockIdeal: undefined,
+            stockMinimo: baseVariantes.stockMinimo,
+            stockIdeal: baseVariantes.stockIdeal,
             imagen: '',
             idFamilia: baseVariantes.idFamilia,
             idPromocion: undefined,
@@ -1140,6 +1164,24 @@ export function ArticulosPage() {
               />
             </Box>
 
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <TextField
+                label="Stock mínimo (opcional)"
+                type="number"
+                fullWidth
+                value={baseVariantes.stockMinimo ?? ''}
+                onChange={(e) => actualizarBaseVariantes('stockMinimo', e.target.value ? Number(e.target.value) : undefined)}
+                helperText="Mismo umbral para todas las variantes de abajo — si querés que aparezcan en el aviso de 'Stock bajo'."
+              />
+              <TextField
+                label="Stock ideal (opcional)"
+                type="number"
+                fullWidth
+                value={baseVariantes.stockIdeal ?? ''}
+                onChange={(e) => actualizarBaseVariantes('stockIdeal', e.target.value ? Number(e.target.value) : undefined)}
+              />
+            </Box>
+
             <Divider />
 
             <Typography variant="subtitle2">Variantes</Typography>
@@ -1296,8 +1338,9 @@ export function ArticulosPage() {
           <Stack spacing={2} sx={{ mt: 1 }}>
             {errorGrupo && <Alert severity="error">{errorGrupo}</Alert>}
             <Alert severity="info">
-              Se actualiza en las {grupoEnEdicion?.articulos.length} variantes de este grupo a la
-              vez (talla/color, precio, costo y stock de cada una no se tocan).
+              Descripción, Familia y Stock mínimo/ideal se actualizan en las{' '}
+              {grupoEnEdicion?.articulos.length} variantes de este grupo a la vez — talla/color,
+              precio, costo y el stock actual de cada una no se tocan.
             </Alert>
             <TextField
               label="Descripción"
@@ -1319,6 +1362,27 @@ export function ArticulosPage() {
                 </MenuItem>
               ))}
             </TextField>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <TextField
+                label="Stock mínimo (opcional)"
+                type="number"
+                fullWidth
+                value={formGrupo.stockMinimo ?? ''}
+                onChange={(e) =>
+                  setFormGrupo((prev) => ({ ...prev, stockMinimo: e.target.value ? Number(e.target.value) : undefined }))
+                }
+                helperText="Para que aparezcan en el aviso de 'Stock bajo'."
+              />
+              <TextField
+                label="Stock ideal (opcional)"
+                type="number"
+                fullWidth
+                value={formGrupo.stockIdeal ?? ''}
+                onChange={(e) =>
+                  setFormGrupo((prev) => ({ ...prev, stockIdeal: e.target.value ? Number(e.target.value) : undefined }))
+                }
+              />
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions>
