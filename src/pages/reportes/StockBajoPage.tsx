@@ -24,7 +24,8 @@ export function StockBajoPage() {
           Stock bajo
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Artículos activos cuyo stock actual llegó o bajó de su stock mínimo definido.
+          Artículos activos cuyo stock actual llegó o bajó de su stock mínimo definido — o que se
+          quedaron directamente en 0 si no tienen un stock mínimo configurado.
         </Typography>
       </div>
 
