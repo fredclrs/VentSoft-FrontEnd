@@ -14,20 +14,27 @@ import TableCell from '@mui/material/TableCell'
 import TableContainer from '@mui/material/TableContainer'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
+import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import PrintIcon from '@mui/icons-material/PrintOutlined'
+import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import { articulosApi, getStockTodos } from '../../api/articulos'
 import { familiasApi } from '../../api/familias'
 import { getErrorMessage } from '../../api/errors'
 import { imprimirListado } from '../../utils/imprimirListado'
 import { useConfiguracionEmpresa } from '../../hooks/useConfiguracionEmpresa'
 import { fraccionDe } from '../../utils/fraccion'
+import { EscanerCamara } from '../../components/EscanerCamara'
 
 export function StockActualPage() {
   const { nombreNegocio } = useConfiguracionEmpresa()
   const [texto, setTexto] = useState('')
   const [idFamilia, setIdFamilia] = useState<number | ''>('')
+  // Para caminar por el local y consultar stock escaneando, sin arriesgarse a agregar nada a
+  // ninguna venta/compra — acá no hay carrito, escanear solo filtra la tabla de abajo.
+  const [escanerAbierto, setEscanerAbierto] = useState(false)
 
   const stockQuery = useQuery({ queryKey: ['stock', 'todos'], queryFn: getStockTodos })
   const articulosQuery = useQuery({ queryKey: ['articulos'], queryFn: () => articulosApi.search() })
@@ -95,17 +102,34 @@ export function StockActualPage() {
         </Typography>
         <Typography variant="body2" color="text.secondary">
           Cuánto queda de cada artículo activo, tenga poco o mucho (para eso puntual, ver el
-          reporte de "Stock bajo").
+          reporte de "Stock bajo"). Podés escanear con la cámara para consultar sin riesgo de
+          agregar nada a ninguna venta o compra.
         </Typography>
       </div>
 
       <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
         <TextField
-          label="Buscar por código o descripción"
+          label="Buscar o escanear por código o descripción"
           size="small"
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           sx={{ minWidth: 260 }}
+          slotProps={{
+            input: {
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    title={escanerAbierto ? 'Cerrar cámara' : 'Escanear con la cámara'}
+                    color={escanerAbierto ? 'primary' : 'default'}
+                    onClick={() => setEscanerAbierto((v) => !v)}
+                  >
+                    <CameraAltIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            },
+          }}
         />
         <TextField
           select
@@ -127,6 +151,13 @@ export function StockActualPage() {
           Imprimir
         </Button>
       </Stack>
+
+      {escanerAbierto && (
+        <EscanerCamara
+          onCodigo={(codigo) => setTexto(codigo)}
+          onCerrar={() => setEscanerAbierto(false)}
+        />
+      )}
 
       {hayError && (
         <Alert severity="error">
