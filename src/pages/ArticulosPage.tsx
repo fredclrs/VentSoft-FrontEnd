@@ -157,6 +157,7 @@ export function ArticulosPage() {
   const [gruposExpandidos, setGruposExpandidos] = useState<Record<string, boolean>>({})
   const [grupoEnEdicion, setGrupoEnEdicion] = useState<GrupoArticulos | null>(null)
   const [formGrupo, setFormGrupo] = useState({
+    codigo: '',
     descripcion: '',
     idFamilia: 0,
     stockMinimo: undefined as number | undefined,
@@ -363,6 +364,7 @@ export function ArticulosPage() {
     const base = grupo.articulos[0]
     setGrupoEnEdicion(grupo)
     setFormGrupo({
+      codigo: grupo.codigo,
       descripcion: grupo.descripcion,
       idFamilia: grupo.idFamilia,
       stockMinimo: base.stockMinimo ?? undefined,
@@ -381,7 +383,7 @@ export function ArticulosPage() {
       const resultados = await Promise.allSettled(
         grupoEnEdicion.articulos.map((a) =>
           articulosApi.update(a.id, {
-            codigo: a.codigo,
+            codigo: formGrupo.codigo,
             descripcion: formGrupo.descripcion,
             tamano: a.tamano,
             unidadMedida: a.unidadMedida ?? '',
@@ -1338,10 +1340,19 @@ export function ArticulosPage() {
           <Stack spacing={2} sx={{ mt: 1 }}>
             {errorGrupo && <Alert severity="error">{errorGrupo}</Alert>}
             <Alert severity="info">
-              Descripción, Familia y Stock mínimo/ideal se actualizan en las{' '}
+              Código, Descripción, Familia y Stock mínimo/ideal se actualizan en las{' '}
               {grupoEnEdicion?.articulos.length} variantes de este grupo a la vez — talla/color,
-              precio, costo y el stock actual de cada una no se tocan.
+              precio, costo y el stock actual de cada una no se tocan. Si cambiás el código a uno
+              que ya usa otro producto con otra descripción/familia, se va a rechazar (misma
+              validación que al dar de alta).
             </Alert>
+            <TextField
+              label="Código"
+              required
+              fullWidth
+              value={formGrupo.codigo}
+              onChange={(e) => setFormGrupo((prev) => ({ ...prev, codigo: e.target.value }))}
+            />
             <TextField
               label="Descripción"
               fullWidth
@@ -1389,7 +1400,7 @@ export function ArticulosPage() {
           <Button onClick={cerrarEditarGrupo}>Cancelar</Button>
           <Button
             variant="contained"
-            disabled={editarGrupoMutation.isPending || formGrupo.idFamilia <= 0}
+            disabled={editarGrupoMutation.isPending || formGrupo.idFamilia <= 0 || !formGrupo.codigo.trim()}
             onClick={() => editarGrupoMutation.mutate()}
           >
             {editarGrupoMutation.isPending ? 'Guardando…' : 'Guardar'}
