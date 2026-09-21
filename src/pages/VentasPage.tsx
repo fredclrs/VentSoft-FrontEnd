@@ -24,8 +24,10 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import BarcodeIcon from '@mui/icons-material/BarcodeReader'
+import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
 import { SelectorVariantes } from '../components/SelectorVariantes'
+import { EscanerCamara } from '../components/EscanerCamara'
 import { CampoNumero } from '../components/CampoNumero'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
@@ -102,6 +104,9 @@ export function VentasPage() {
   // ver ConfiguracionEmpresa.PermiteCodigoCompartidoEntreArticulos), se elige cuál es acá en vez
   // de agregarlo directo.
   const [variantesParaElegir, setVariantesParaElegir] = useState<Articulo[] | null>(null)
+  // Lector con la cámara del dispositivo (útil en celular, sin lector físico) — se abre a
+  // demanda, no está siempre activo (evita pedir permiso de cámara sin necesitarla).
+  const [escanerCamaraAbierto, setEscanerCamaraAbierto] = useState(false)
   const [errorMutacion, setErrorMutacion] = useState<string | null>(null)
   const [avisoExito, setAvisoExito] = useState<string | null>(null)
   const [confirmarCancelar, setConfirmarCancelar] = useState(false)
@@ -388,6 +393,27 @@ export function VentasPage() {
     setVariantesParaElegir(null)
   }
 
+  /** Busca el código (de un lector físico, del cuadro de texto, o de la cámara) y agrega el
+   * artículo si hay una sola coincidencia, o abre el selector de variantes si hay varias. */
+  function procesarCodigo(codigoCrudo: string) {
+    const codigo = codigoCrudo.trim()
+    if (!codigo) return
+
+    setVariantesParaElegir(null)
+    const coincidencias = (articulosQuery.data ?? []).filter(
+      (a) => a.codigo.toLowerCase() === codigo.toLowerCase(),
+    )
+    if (coincidencias.length === 0) {
+      setErrorEscaneo(`No se encontró ningún artículo con el código "${codigo}".`)
+    } else if (coincidencias.length === 1) {
+      agregarSiHayStock(coincidencias[0])
+    } else {
+      // Mismo código, varias variantes (talla/color) — se elige acá en vez de agregar directo.
+      setVariantesParaElegir(coincidencias)
+      setErrorEscaneo(null)
+    }
+  }
+
   function handleScanKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     // Selector de variantes abierto: 1-9 elige directo sin escribir nada en el cuadro (el foco
     // nunca se mueve, así se sigue escaneando sin tocar el mouse). Cualquier otra tecla que no
@@ -416,20 +442,7 @@ export function VentasPage() {
       if (puedeRegistrar) registrarMutation.mutate()
       return
     }
-
-    setVariantesParaElegir(null)
-    const coincidencias = (articulosQuery.data ?? []).filter(
-      (a) => a.codigo.toLowerCase() === codigo.toLowerCase(),
-    )
-    if (coincidencias.length === 0) {
-      setErrorEscaneo(`No se encontró ningún artículo con el código "${codigo}".`)
-    } else if (coincidencias.length === 1) {
-      agregarSiHayStock(coincidencias[0])
-    } else {
-      // Mismo código, varias variantes (talla/color) — se elige acá en vez de agregar directo.
-      setVariantesParaElegir(coincidencias)
-      setErrorEscaneo(null)
-    }
+    procesarCodigo(codigo)
     setCodigoEscaneado('')
   }
 
@@ -678,6 +691,18 @@ export function VentasPage() {
                   <BarcodeIcon fontSize="small" />
                 </InputAdornment>
               ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    title={escanerCamaraAbierto ? 'Cerrar cámara' : 'Escanear con la cámara'}
+                    color={escanerCamaraAbierto ? 'primary' : 'default'}
+                    onClick={() => setEscanerCamaraAbierto((v) => !v)}
+                  >
+                    <CameraAltIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
             },
           }}
         />
@@ -712,6 +737,17 @@ export function VentasPage() {
           Agregar
         </Button>
       </Box>
+
+      {/* Cámara embebida en la página (no pantalla completa) — el carrito de abajo sigue
+          visible mientras se escanea. Modo continuo: no hay que volver a tocar nada entre un
+          producto y el siguiente. Se pausa sola mientras el selector de variantes está abierto. */}
+      {escanerCamaraAbierto && (
+        <EscanerCamara
+          onCodigo={procesarCodigo}
+          pausado={!!variantesParaElegir}
+          onCerrar={() => setEscanerCamaraAbierto(false)}
+        />
+      )}
 
       {/* Aparece cuando el código escaneado tiene varias variantes (mismo código, distinta
           talla/color). Apretar el número (o clickear) agrega esa variante — no es un Dialog a
