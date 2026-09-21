@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -20,6 +21,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import PrintIcon from '@mui/icons-material/PrintOutlined'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
+import BarcodeIcon from '@mui/icons-material/BarcodeReader'
 import { articulosApi, getStockTodos } from '../../api/articulos'
 import { familiasApi } from '../../api/familias'
 import { getErrorMessage } from '../../api/errors'
@@ -32,9 +34,24 @@ export function StockActualPage() {
   const { nombreNegocio } = useConfiguracionEmpresa()
   const [texto, setTexto] = useState('')
   const [idFamilia, setIdFamilia] = useState<number | ''>('')
-  // Para caminar por el local y consultar stock escaneando, sin arriesgarse a agregar nada a
-  // ninguna venta/compra — acá no hay carrito, escanear solo filtra la tabla de abajo.
+  // Campo dedicado a escanear (lector físico o cámara) — separado del buscador manual de abajo,
+  // igual que en Ventas: un lector físico tipea acá y Enter filtra la tabla, sin tener que elegir
+  // nada (acá no hay carrito, es solo consulta).
+  const [codigoEscaneado, setCodigoEscaneado] = useState('')
+  const scanInputRef = useRef<HTMLInputElement>(null)
   const [escanerAbierto, setEscanerAbierto] = useState(false)
+
+  function procesarCodigoEscaneado(codigo: string) {
+    if (!codigo.trim()) return
+    setTexto(codigo.trim())
+  }
+
+  function handleScanKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    procesarCodigoEscaneado(codigoEscaneado)
+    setCodigoEscaneado('')
+  }
 
   const stockQuery = useQuery({ queryKey: ['stock', 'todos'], queryFn: getStockTodos })
   const articulosQuery = useQuery({ queryKey: ['articulos'], queryFn: () => articulosApi.search() })
@@ -102,20 +119,29 @@ export function StockActualPage() {
         </Typography>
         <Typography variant="body2" color="text.secondary">
           Cuánto queda de cada artículo activo, tenga poco o mucho (para eso puntual, ver el
-          reporte de "Stock bajo"). Podés escanear con la cámara para consultar sin riesgo de
-          agregar nada a ninguna venta o compra.
+          reporte de "Stock bajo"). Podés escanear (lector físico o cámara) para consultar sin
+          riesgo de agregar nada a ninguna venta o compra.
         </Typography>
       </div>
 
       <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
         <TextField
-          label="Buscar o escanear por código o descripción"
+          inputRef={scanInputRef}
+          label="Escanear código de barras"
+          placeholder="Escaneá o escribí el código y Enter"
           size="small"
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
+          autoComplete="off"
+          value={codigoEscaneado}
+          onChange={(e) => setCodigoEscaneado(e.target.value)}
+          onKeyDown={handleScanKeyDown}
           sx={{ minWidth: 260 }}
           slotProps={{
             input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <BarcodeIcon fontSize="small" />
+                </InputAdornment>
+              ),
               endAdornment: (
                 <InputAdornment position="end">
                   <IconButton
@@ -130,6 +156,13 @@ export function StockActualPage() {
               ),
             },
           }}
+        />
+        <TextField
+          label="…o buscar por código o descripción"
+          size="small"
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          sx={{ minWidth: 260 }}
         />
         <TextField
           select
@@ -153,10 +186,7 @@ export function StockActualPage() {
       </Stack>
 
       {escanerAbierto && (
-        <EscanerCamara
-          onCodigo={(codigo) => setTexto(codigo)}
-          onCerrar={() => setEscanerAbierto(false)}
-        />
+        <EscanerCamara onCodigo={procesarCodigoEscaneado} onCerrar={() => setEscanerAbierto(false)} />
       )}
 
       {hayError && (
