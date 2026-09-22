@@ -200,6 +200,11 @@ export function ColaEtiquetasPage() {
                       </Typography>
                     )}
                   </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color="text.secondary">
+                      {haceCuanto(e.fechaAgregado)}
+                    </Typography>
+                  </TableCell>
                   <TableCell align="right">
                     <CampoNumero
                       size="small"
