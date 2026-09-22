@@ -20,10 +20,13 @@ interface EscanerCamaraProps {
 }
 
 // Code128/EAN/UPC son los formatos de código de barras "de líneas" (los que imprime VentSoft y
-// los que traen de fábrica la mayoría de los productos); QR también se soporta por si alguna vez
-// hace falta. No se agregan más formatos a propósito: cuantos menos, más rápido decodifica.
+// los que traen de fábrica la mayoría de los productos); Code 39 se suma porque es común en
+// etiquetas de fábrica de indumentaria (códigos alfanuméricos tipo "CH130AZ"); QR también se
+// soporta por si alguna vez hace falta. No se agregan más formatos a propósito: cuantos menos,
+// más rápido decodifica.
 const FORMATOS_SOPORTADOS = [
   BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
   BarcodeFormat.EAN_13,
   BarcodeFormat.EAN_8,
   BarcodeFormat.UPC_A,
