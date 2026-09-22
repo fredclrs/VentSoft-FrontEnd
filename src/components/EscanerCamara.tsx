@@ -62,8 +62,20 @@ export function EscanerCamara({ onCodigo, pausado, onCerrar }: EscanerCamaraProp
     let ultimoTexto = ''
     let ultimoMomento = 0
 
+    // Pedimos cámara trasera y buena resolución explícitamente — sin esto, algunos navegadores
+    // (Safari/iOS en particular) pueden entregar un video de resolución baja o no priorizar la
+    // cámara trasera, lo que hace mucho más lento (o directamente imposible) enfocar de cerca un
+    // código de barras chico.
+    const constraints: MediaStreamConstraints = {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    }
+
     reader
-      .decodeFromVideoDevice(undefined, videoRef.current!, (resultado, err) => {
+      .decodeFromConstraints(constraints, videoRef.current!, (resultado, err) => {
         if (cancelado || pausadoRef.current) return
         if (resultado) {
           const texto = resultado.getText()
