@@ -114,7 +114,7 @@ function calcularPrecioPorMargen(costo: number, margen: number, redondearEnteros
 
 export function ArticulosPage() {
   const isMobile = useIsMobile()
-  const { money, simboloMoneda, redondearPreciosEnteros, permiteCodigoCompartidoEntreArticulos } =
+  const { money, redondearPreciosEnteros, permiteCodigoCompartidoEntreArticulos } =
     useConfiguracionEmpresa()
   const queryClient = useQueryClient()
   const [busqueda, setBusqueda] = useState('')
@@ -1324,7 +1324,7 @@ export function ArticulosPage() {
             disabled={!Number(cantidadEtiquetas) || Number(cantidadEtiquetas) < 1}
             onClick={() => {
               if (articuloParaEtiqueta) {
-                imprimirEtiquetaArticulo(articuloParaEtiqueta, Number(cantidadEtiquetas), simboloMoneda)
+                imprimirEtiquetaArticulo(articuloParaEtiqueta, Number(cantidadEtiquetas))
               }
               setArticuloParaEtiqueta(null)
             }}

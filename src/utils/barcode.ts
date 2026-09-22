@@ -1,5 +1,4 @@
 import JsBarcode from 'jsbarcode'
-import { formatearMonto } from './moneda'
 
 /** Genera el markup SVG de un código de barras Code128 a partir de un texto (el Código del artículo). */
 export function barcodeSvgMarkup(value: string): string | null {
@@ -31,15 +30,17 @@ function escapeHtml(texto: string): string {
 interface EtiquetaArticulo {
   codigo: string
   descripcion?: string | null
-  precio: number
 }
 
 /**
- * Abre una hoja con varias copias de la misma etiqueta (código de barras + descripción +
- * precio), en grilla, lista para imprimir y recortar — para cuando hacen falta muchas
- * unidades del mismo artículo (ej. 30 poleras iguales) sin desperdiciar una hoja por unidad.
+ * Abre una hoja con varias copias de la misma etiqueta (código de barras + descripción), en
+ * grilla, lista para imprimir y recortar — para cuando hacen falta muchas unidades del mismo
+ * artículo (ej. 30 poleras iguales) sin desperdiciar una hoja por unidad.
+ *
+ * A propósito SIN precio: el precio se maneja con un sticker aparte, para poder sacarlo solo a
+ * él cuando el producto es para regalo, sin tener que arrancar toda la etiqueta con el código.
  */
-export function imprimirEtiquetaArticulo(articulo: EtiquetaArticulo, cantidad: number, simboloMoneda: string) {
+export function imprimirEtiquetaArticulo(articulo: EtiquetaArticulo, cantidad: number) {
   const barcodeMarkup = barcodeSvgMarkup(articulo.codigo)
   if (!barcodeMarkup) {
     window.alert('No se pudo generar el código de barras para este artículo.')
@@ -56,7 +57,6 @@ export function imprimirEtiquetaArticulo(articulo: EtiquetaArticulo, cantidad: n
     <div class="etiqueta">
       <div class="descripcion">${escapeHtml(articulo.descripcion ?? '')}</div>
       ${barcodeMarkup}
-      <div class="precio">${formatearMonto(articulo.precio, simboloMoneda)}</div>
     </div>
   `
   const hoja = etiqueta.repeat(Math.max(1, Math.round(cantidad)))
@@ -81,7 +81,6 @@ export function imprimirEtiquetaArticulo(articulo: EtiquetaArticulo, cantidad: n
             break-inside: avoid;
           }
           .descripcion { font-size: 9px; margin-bottom: 2px; word-break: break-word; line-height: 1.2; }
-          .precio { font-size: 13px; font-weight: 700; margin-top: 2px; }
           svg { width: 100%; height: auto; }
         </style>
       </head>
