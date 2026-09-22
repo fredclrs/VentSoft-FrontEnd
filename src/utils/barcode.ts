@@ -32,18 +32,39 @@ interface EtiquetaArticulo {
   descripcion?: string | null
 }
 
+/** Un ítem de la hoja de etiquetas: su código/descripción y cuántas copias de esa etiqueta
+ * puntual hay que imprimir (no todas las etiquetas de la hoja tienen por qué repetirse la misma
+ * cantidad de veces — para eso sirve la cola de etiquetas, que mezcla productos distintos). */
+interface ItemHojaEtiquetas extends EtiquetaArticulo {
+  cantidad: number
+}
+
 /**
- * Abre una hoja con varias copias de la misma etiqueta (código de barras + descripción), en
- * grilla, lista para imprimir y recortar — para cuando hacen falta muchas unidades del mismo
- * artículo (ej. 30 poleras iguales) sin desperdiciar una hoja por unidad.
+ * Arma y abre la hoja de impresión con una etiqueta (código de barras + descripción) por cada
+ * copia pedida de cada ítem — en grilla, lista para imprimir y recortar (o pegar directo, si es
+ * una hoja de stickers pre-cortada). Si no entran todas en una hoja, el navegador sigue solo en
+ * la próxima (page-break-inside: avoid evita que una etiqueta quede partida entre dos hojas).
  *
  * A propósito SIN precio: el precio se maneja con un sticker aparte, para poder sacarlo solo a
  * él cuando el producto es para regalo, sin tener que arrancar toda la etiqueta con el código.
  */
-export function imprimirEtiquetaArticulo(articulo: EtiquetaArticulo, cantidad: number) {
-  const barcodeMarkup = barcodeSvgMarkup(articulo.codigo)
-  if (!barcodeMarkup) {
-    window.alert('No se pudo generar el código de barras para este artículo.')
+function abrirHojaDeEtiquetas(items: ItemHojaEtiquetas[], tituloVentana: string) {
+  const etiquetas = items
+    .map((item) => {
+      const barcodeMarkup = barcodeSvgMarkup(item.codigo)
+      if (!barcodeMarkup) return ''
+      const unaEtiqueta = `
+        <div class="etiqueta">
+          <div class="descripcion">${escapeHtml(item.descripcion ?? '')}</div>
+          ${barcodeMarkup}
+        </div>
+      `
+      return unaEtiqueta.repeat(Math.max(1, Math.round(item.cantidad)))
+    })
+    .join('')
+
+  if (!etiquetas) {
+    window.alert('No se pudo generar ningún código de barras para imprimir.')
     return
   }
 
@@ -53,20 +74,12 @@ export function imprimirEtiquetaArticulo(articulo: EtiquetaArticulo, cantidad: n
     return
   }
 
-  const etiqueta = `
-    <div class="etiqueta">
-      <div class="descripcion">${escapeHtml(articulo.descripcion ?? '')}</div>
-      ${barcodeMarkup}
-    </div>
-  `
-  const hoja = etiqueta.repeat(Math.max(1, Math.round(cantidad)))
-
   ventana.document.write(`
     <!doctype html>
     <html lang="es">
       <head>
         <meta charset="utf-8" />
-        <title>Etiquetas ${articulo.codigo}</title>
+        <title>${escapeHtml(tituloVentana)}</title>
         <style>
           @page { margin: 8mm; }
           body { font-family: system-ui, sans-serif; margin: 0; }
@@ -85,10 +98,26 @@ export function imprimirEtiquetaArticulo(articulo: EtiquetaArticulo, cantidad: n
         </style>
       </head>
       <body>
-        <div class="hoja">${hoja}</div>
+        <div class="hoja">${etiquetas}</div>
         <script>window.onload = () => { window.print(); }; window.onafterprint = () => window.close();</script>
       </body>
     </html>
   `)
   ventana.document.close()
+}
+
+/**
+ * Imprime N copias de la etiqueta de UN solo artículo — para cuando entra un producto nuevo y
+ * hacen falta varias unidades iguales (ej. 30 poleras iguales) sin desperdiciar una hoja por
+ * unidad. Si en cambio hay pocas unidades de varios productos distintos, conviene juntarlos en
+ * la Cola de etiquetas e imprimirlos todos juntos (ver imprimirHojaDeCola).
+ */
+export function imprimirEtiquetaArticulo(articulo: EtiquetaArticulo, cantidad: number) {
+  abrirHojaDeEtiquetas([{ ...articulo, cantidad }], `Etiquetas ${articulo.codigo}`)
+}
+
+/** Imprime de una sola vez las etiquetas de varios artículos distintos (la Cola de etiquetas),
+ * mezclados en la misma hoja para aprovechar mejor el papel. */
+export function imprimirHojaDeCola(items: ItemHojaEtiquetas[]) {
+  abrirHojaDeEtiquetas(items, 'Etiquetas')
 }

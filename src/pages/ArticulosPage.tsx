@@ -15,6 +15,7 @@ import InputAdornment from '@mui/material/InputAdornment'
 import Link from '@mui/material/Link'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
+import Snackbar from '@mui/material/Snackbar'
 import Stack from '@mui/material/Stack'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
@@ -42,6 +43,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ErrorDialog } from '../components/ErrorDialog'
 import { CampoNumero } from '../components/CampoNumero'
 import { imprimirEtiquetaArticulo } from '../utils/barcode'
+import { agregarEtiquetaPendiente } from '../api/etiquetasPendientes'
 import { obtenerUbicacion, resumenVariante } from '../utils/articulo'
 import { stickyActionsSx } from '../utils/tableStyles'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -127,6 +129,8 @@ export function ArticulosPage() {
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null)
   const [articuloParaEtiqueta, setArticuloParaEtiqueta] = useState<Articulo | null>(null)
   const [cantidadEtiquetas, setCantidadEtiquetas] = useState('1')
+  const [avisoCola, setAvisoCola] = useState<string | null>(null)
+  const [errorCola, setErrorCola] = useState<string | null>(null)
 
   // "Nuevo producto (variantes)" — solo visible con el código compartido activado (ver
   // ConfiguracionEmpresa.PermiteCodigoCompartidoEntreArticulos): carga un producto (código,
@@ -229,6 +233,16 @@ export function ArticulosPage() {
       setArticuloAEliminar(null)
     },
     onError: (err) => setErrorEliminar(getErrorMessage(err)),
+  })
+
+  const agregarAColaMutation = useMutation({
+    mutationFn: ({ idArticulo, cantidad }: { idArticulo: number; cantidad: number }) =>
+      agregarEtiquetaPendiente({ idArticulo, cantidad }),
+    onSuccess: () => {
+      setAvisoCola('Agregado a la cola de etiquetas.')
+      setArticuloParaEtiqueta(null)
+    },
+    onError: (err) => setErrorCola(getErrorMessage(err)),
   })
 
   function abrirNuevo() {
@@ -1303,8 +1317,10 @@ export function ArticulosPage() {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Typography variant="body2" color="text.secondary">
-              Se genera una hoja con esta cantidad de copias del mismo código de barras, para
-              recortar y pegar en cada prenda/unidad.
+              "Imprimir ahora" genera una hoja solo con esta cantidad de copias de este código —
+              si son pocas unidades, conviene mejor "Agregar a la cola" y juntar varios productos
+              distintos para imprimirlos todos juntos después (ver Inventario → Cola de
+              etiquetas), sin desperdiciar una hoja por cada uno.
             </Typography>
             <TextField
               label="Cantidad de etiquetas"
@@ -1320,6 +1336,16 @@ export function ArticulosPage() {
         <DialogActions>
           <Button onClick={() => setArticuloParaEtiqueta(null)}>Cancelar</Button>
           <Button
+            disabled={!Number(cantidadEtiquetas) || Number(cantidadEtiquetas) < 1 || agregarAColaMutation.isPending}
+            onClick={() => {
+              if (articuloParaEtiqueta) {
+                agregarAColaMutation.mutate({ idArticulo: articuloParaEtiqueta.id, cantidad: Number(cantidadEtiquetas) })
+              }
+            }}
+          >
+            Agregar a la cola
+          </Button>
+          <Button
             variant="contained"
             disabled={!Number(cantidadEtiquetas) || Number(cantidadEtiquetas) < 1}
             onClick={() => {
@@ -1329,7 +1355,7 @@ export function ArticulosPage() {
               setArticuloParaEtiqueta(null)
             }}
           >
-            Imprimir
+            Imprimir ahora
           </Button>
         </DialogActions>
       </Dialog>
@@ -1410,6 +1436,15 @@ export function ArticulosPage() {
 
       <ErrorDialog mensaje={errorMutacion} onCerrar={() => setErrorMutacion(null)} />
       <ErrorDialog mensaje={errorVariantes} onCerrar={() => setErrorVariantes(null)} />
+      <ErrorDialog mensaje={errorCola} onCerrar={() => setErrorCola(null)} />
+
+      <Snackbar
+        open={!!avisoCola}
+        autoHideDuration={4000}
+        onClose={() => setAvisoCola(null)}
+        message={avisoCola}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
 
       <ConfirmDialog
         open={!!articuloAEliminar}
