@@ -33,6 +33,7 @@ import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
 import { SelectorVariantes } from '../components/SelectorVariantes'
 import { EscanerCamara } from '../components/EscanerCamara'
+import { ErrorDialog } from '../components/ErrorDialog'
 import { CampoNumero } from '../components/CampoNumero'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { fraccionDe, costoUnidadSueltaDe } from '../utils/fraccion'
@@ -730,6 +731,8 @@ export function ComprasPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ErrorDialog mensaje={errorMutacion} onCerrar={() => setErrorMutacion(null)} />
     </Stack>
   )
 }

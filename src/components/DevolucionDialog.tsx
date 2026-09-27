@@ -25,6 +25,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import { ConfirmDialog } from './ConfirmDialog'
+import { ErrorDialog } from './ErrorDialog'
 import { EntityAutocomplete } from './EntityAutocomplete'
 import { CampoNumero } from './CampoNumero'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
@@ -547,6 +548,8 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
       onConfirmar={confirmarDescartarCambioYDestildar}
       onCancelar={() => setConfirmarDescartarCambio(false)}
     />
+
+    <ErrorDialog mensaje={error} onCerrar={() => setError(null)} />
     </>
   )
 }

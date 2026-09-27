@@ -30,6 +30,7 @@ import { SelectorVariantes } from '../components/SelectorVariantes'
 import { EscanerCamara } from '../components/EscanerCamara'
 import { CampoNumero } from '../components/CampoNumero'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ErrorDialog } from '../components/ErrorDialog'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { imprimirNotaVenta } from '../utils/notaVenta'
 import type { FormatoImpresion } from '../utils/notaVenta'
@@ -979,6 +980,8 @@ export function VentasPage() {
         onConfirmar={confirmarCancelarVenta}
         onCancelar={() => setConfirmarCancelar(false)}
       />
+
+      <ErrorDialog mensaje={errorMutacion} onCerrar={() => setErrorMutacion(null)} />
 
       <Snackbar
         open={!!avisoExito}
