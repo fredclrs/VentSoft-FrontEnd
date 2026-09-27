@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { FormEvent, KeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -46,11 +46,17 @@ export function StockActualPage() {
     setTexto(codigo.trim())
   }
 
+  /** Lo que pasa al "enviar" el cuadro de escaneo (Enter físico, tecla "Ir" del celular, o el
+   * submit nativo del <form> que lo envuelve — ver por qué en el form de más abajo). */
+  function manejarEnvioEscaneo() {
+    procesarCodigoEscaneado(codigoEscaneado)
+    setCodigoEscaneado('')
+  }
+
   function handleScanKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return
     e.preventDefault()
-    procesarCodigoEscaneado(codigoEscaneado)
-    setCodigoEscaneado('')
+    manejarEnvioEscaneo()
   }
 
   const stockQuery = useQuery({ queryKey: ['stock', 'todos'], queryFn: getStockTodos })
@@ -125,39 +131,52 @@ export function StockActualPage() {
       </div>
 
       <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
-        <TextField
-          inputRef={scanInputRef}
-          label="Escanear código de barras"
-          placeholder="Escaneá o escribí el código y Enter"
-          size="small"
-          autoComplete="off"
-          value={codigoEscaneado}
-          onChange={(e) => setCodigoEscaneado(e.target.value)}
-          onKeyDown={handleScanKeyDown}
-          sx={{ minWidth: 260 }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <BarcodeIcon fontSize="small" />
-                </InputAdornment>
-              ),
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    title={escanerAbierto ? 'Cerrar cámara' : 'Escanear con la cámara'}
-                    color={escanerAbierto ? 'primary' : 'default'}
-                    onClick={() => setEscanerAbierto((v) => !v)}
-                  >
-                    <CameraAltIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ),
-            },
-            htmlInput: { enterKeyHint: 'go' },
+        <Box
+          component="form"
+          sx={{ display: 'contents' }}
+          onSubmit={(e: FormEvent) => {
+            // Algunos teclados de celular no mandan un Enter "de verdad" al JavaScript con la
+            // tecla "Ir" — en cambio disparan el submit nativo del form que envuelve el campo.
+            // Envolverlo en un <form> de verdad (en vez de depender solo de onKeyDown) hace que
+            // esto funcione en todos los celulares, no solo los que sí mandan bien el Enter.
+            e.preventDefault()
+            manejarEnvioEscaneo()
           }}
-        />
+        >
+          <TextField
+            inputRef={scanInputRef}
+            label="Escanear código de barras"
+            placeholder="Escaneá o escribí el código y Enter"
+            size="small"
+            autoComplete="off"
+            value={codigoEscaneado}
+            onChange={(e) => setCodigoEscaneado(e.target.value)}
+            onKeyDown={handleScanKeyDown}
+            sx={{ minWidth: 260 }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <BarcodeIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      title={escanerAbierto ? 'Cerrar cámara' : 'Escanear con la cámara'}
+                      color={escanerAbierto ? 'primary' : 'default'}
+                      onClick={() => setEscanerAbierto((v) => !v)}
+                    >
+                      <CameraAltIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+              htmlInput: { enterKeyHint: 'go' },
+            }}
+          />
+        </Box>
         <TextField
           label="…o buscar por código o descripción"
           size="small"
