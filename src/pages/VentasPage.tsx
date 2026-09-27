@@ -704,6 +704,7 @@ export function VentasPage() {
                 </InputAdornment>
               ),
             },
+            htmlInput: { enterKeyHint: 'go' },
           }}
         />
         <EntityAutocomplete

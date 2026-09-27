@@ -434,6 +434,7 @@ export function ComprasPage() {
                 </InputAdornment>
               ),
             },
+            htmlInput: { enterKeyHint: 'go' },
           }}
         />
         <EntityAutocomplete

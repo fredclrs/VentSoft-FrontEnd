@@ -155,6 +155,7 @@ export function StockActualPage() {
                 </InputAdornment>
               ),
             },
+            htmlInput: { enterKeyHint: 'go' },
           }}
         />
         <TextField
