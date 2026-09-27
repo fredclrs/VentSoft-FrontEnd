@@ -126,6 +126,20 @@ export function VentasPage() {
     [stockQuery.data],
   )
 
+  /** Igual que stockPorArticulo, pero restando lo que ya está en el carrito de ESTA venta (sin
+   * confirmar todavía) — para que al volver a escanear/buscar un artículo durante la misma venta
+   * se vea cuánto queda realmente disponible para seguir agregando, no el stock crudo del
+   * servidor (que no sabe nada de este carrito hasta que la venta se registre de verdad). El
+   * listado de Artículos/Stock actual sigue mostrando el stock crudo a propósito — ahí sí importa
+   * el número real, por si otra persona lo está mirando en otra pantalla. */
+  const stockLibrePorArticulo = useMemo(() => {
+    const mapa = new Map(stockPorArticulo)
+    for (const linea of lineas) {
+      mapa.set(linea.articulo.id, (mapa.get(linea.articulo.id) ?? 0) - aUnidades(linea))
+    }
+    return mapa
+  }, [stockPorArticulo, lineas])
+
   /** Stock que queda libre para un artículo (en unidades), descontando lo que ya está en esta
    * venta en CUALQUIER renglón suyo —por paquete o suelto, ambos salen del mismo stock— (no lo
    * que ya se vendió antes: eso ya está descontado en el número que manda el backend).
@@ -734,7 +748,7 @@ export function VentasPage() {
           getLabel={(a: Articulo) => etiquetaArticulo(a, permiteCodigoCompartidoEntreArticulos)}
           getSecondaryLabel={(a: Articulo) => {
             const ubicacion = obtenerUbicacion(a)
-            const stock = stockPorArticulo.get(a.id) ?? 0
+            const stock = stockLibrePorArticulo.get(a.id) ?? 0
             const textoStock = !stockQuery.data ? '' : ` · ${stock > 0 ? `Stock: ${stock}` : 'Sin stock'}`
             return `Precio: ${money(a.precio)}${ubicacion ? ` · Ubicación: ${ubicacion}` : ''}${textoStock}`
           }}
@@ -775,7 +789,7 @@ export function VentasPage() {
       {variantesParaElegir && (
         <SelectorVariantes
           variantes={variantesParaElegir}
-          stockPorArticulo={stockPorArticulo}
+          stockPorArticulo={stockLibrePorArticulo}
           onElegir={elegirVariante}
           onCerrar={() => setVariantesParaElegir(null)}
         />
