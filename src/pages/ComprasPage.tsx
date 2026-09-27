@@ -40,13 +40,27 @@ import { fraccionDe, costoUnidadSueltaDe } from '../utils/fraccion'
 import type { ModoVentaCompra } from '../utils/fraccion'
 import { buscarProveedoresTexto } from '../api/proveedores'
 import { actualizarPrecioArticulo, articulosApi, buscarArticulos, getStockTodos } from '../api/articulos'
+import { familiasApi } from '../api/familias'
 import { registrarCompra } from '../api/compras'
+import { leerFactura } from '../api/ia'
+import { CapturarFoto } from '../components/CapturarFoto'
 import { useAuth } from '../auth/AuthContext'
 import { getErrorMessage } from '../api/errors'
 import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import type { Proveedor } from '../types/proveedor'
 import type { Articulo } from '../types/articulo'
 import type { AvisoSinMargen, PrecioSugerido, RegistrarDetalleCompra } from '../types/compra'
+import type { LineaFactura } from '../types/ia'
+
+/** Un renglón de la factura leída por IA, con lo que hace falta para revisarlo/confirmarlo en
+ * pantalla: si está tildado para agregar, y (solo si es nuevo) los datos que hacen falta
+ * completar para poder darlo de alta como Artículo. */
+interface LineaFacturaEditable extends LineaFactura {
+  seleccionada: boolean
+  codigoNuevo: string
+  idFamiliaNuevo: number
+  tamanoNuevo: string
+}
 
 interface LineaCompra {
   articulo: Articulo
@@ -75,7 +89,7 @@ function costoPorUnidadDe(linea: LineaCompra): number {
 
 export function ComprasPage() {
   const { usuario } = useAuth()
-  const { money, proveedorPorDefecto, permiteCompraACredito, permiteCodigoCompartidoEntreArticulos } =
+  const { money, proveedorPorDefecto, permiteCompraACredito, permiteCodigoCompartidoEntreArticulos, tieneClaveApiIA } =
     useConfiguracionEmpresa()
   const queryClient = useQueryClient()
 
@@ -106,10 +120,16 @@ export function ComprasPage() {
   const [errorPrecios, setErrorPrecios] = useState<string | null>(null)
   const [avisosSinMargen, setAvisosSinMargen] = useState<AvisoSinMargen[] | null>(null)
   const [avisoExito, setAvisoExito] = useState<string | null>(null)
+  // Factura leída con IA — mientras no es null, se muestra el diálogo de revisión (ver
+  // leerFacturaMutation/confirmarFacturaMutation más abajo). Ver ConfiguracionEmpresa.tieneClaveApiIA
+  // para por qué el botón que dispara esto puede no estar visible.
+  const [lineasFactura, setLineasFactura] = useState<LineaFacturaEditable[] | null>(null)
   const scanInputRef = useRef<HTMLInputElement>(null)
 
   // Solo para resolver código/descripción al agregar por escaneo; no es historial.
   const articulosQuery = useQuery({ queryKey: ['articulos'], queryFn: () => articulosApi.search() })
+  // Solo hace falta si la IA encuentra productos nuevos en la factura (para elegirles Familia).
+  const familiasQuery = useQuery({ queryKey: ['familias'], queryFn: () => familiasApi.search() })
   // Solo para mostrar el stock actual en el selector de variantes (ver más abajo) — a diferencia
   // de Ventas, acá no bloquea nada (comprar no depende del stock).
   const stockQuery = useQuery({ queryKey: ['stock', 'todos'], queryFn: getStockTodos })
@@ -241,6 +261,62 @@ export function ComprasPage() {
     onError: (err) => setErrorPrecios(getErrorMessage(err)),
   })
 
+  const leerFacturaMutation = useMutation({
+    mutationFn: leerFactura,
+    onSuccess: (lineas) => {
+      setLineasFactura(
+        lineas.map((l) => ({
+          ...l,
+          seleccionada: true,
+          codigoNuevo: '',
+          idFamiliaNuevo: 0,
+          tamanoNuevo: '',
+        })),
+      )
+    },
+    onError: (err) => setErrorMutacion(getErrorMessage(err)),
+  })
+
+  /** Da de alta los productos nuevos que vinieron marcados en la factura (uno por uno, para
+   * poder usar el Id que devuelve cada alta) y agrega TODAS las líneas tildadas (nuevas +
+   * existentes) al carrito de esta compra — no toca registrarCompra ni el resto del flujo, la
+   * IA solo termina llenando "lineas" igual que ya hace el escaneo/búsqueda manual. */
+  const confirmarFacturaMutation = useMutation({
+    mutationFn: async () => {
+      const seleccionadas = (lineasFactura ?? []).filter((l) => l.seleccionada)
+      for (const linea of seleccionadas) {
+        if (linea.esNuevo) {
+          const nuevoArticulo = await articulosApi.create({
+            codigo: linea.codigoNuevo,
+            descripcion: linea.descripcion,
+            tamano: linea.tamanoNuevo,
+            unidadMedida: '',
+            fraccion: 1,
+            precio: linea.costoUnitario,
+            costo: linea.costoUnitario,
+            precioUnidadSuelta: undefined,
+            margenGanancia: undefined,
+            stockMinimo: undefined,
+            stockIdeal: undefined,
+            imagen: '',
+            idFamilia: linea.idFamiliaNuevo,
+            idPromocion: undefined,
+            caracteristicas: [],
+          })
+          agregarLineaDesdeIA(nuevoArticulo, linea.cantidad, linea.costoUnitario)
+        } else {
+          const articuloExistente = articulosQuery.data?.find((a) => a.id === linea.idArticuloExistente)
+          if (articuloExistente) agregarLineaDesdeIA(articuloExistente, linea.cantidad, linea.costoUnitario)
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['articulos'] })
+      setLineasFactura(null)
+    },
+    onError: (err) => setErrorMutacion(getErrorMessage(err)),
+  })
+
   /**
    * Agrega el artículo a la compra. Si ya había un renglón de ese artículo SIN lote cargado
    * todavía y en el MISMO modo (paquete o suelto), suma una unidad ahí en vez de duplicar
@@ -262,11 +338,35 @@ export function ComprasPage() {
     })
   }
 
+  function actualizarLineaFactura(index: number, cambios: Partial<LineaFacturaEditable>) {
+    setLineasFactura((prev) => (prev ? prev.map((l, i) => (i === index ? { ...l, ...cambios } : l)) : prev))
+  }
+
+  const lineasFacturaListasParaConfirmar =
+    (lineasFactura ?? []).some((l) => l.seleccionada) &&
+    (lineasFactura ?? [])
+      .filter((l) => l.seleccionada && l.esNuevo)
+      .every((l) => l.codigoNuevo.trim() && l.idFamiliaNuevo > 0 && l.tamanoNuevo.trim())
+
   function agregarLinea() {
     if (!articuloParaAgregar) return
     agregarOIncrementarLinea(articuloParaAgregar, modoParaAgregar)
     setArticuloParaAgregar(null)
     setModoParaAgregar('caja')
+  }
+
+  /** Igual que agregarOIncrementarLinea, pero con cantidad/costo puntuales en vez de sumar de a
+   * 1 — para cuando la IA (factura leída por foto) ya trae la cantidad y el costo de la línea. */
+  function agregarLineaDesdeIA(articulo: Articulo, cantidad: number, costoUnitario: number) {
+    setLineas((prev) => {
+      const index = prev.findIndex((l) => l.articulo.id === articulo.id && !l.lote && l.modo === 'caja')
+      if (index === -1) {
+        return [...prev, { articulo, cantidad, costoUnitario, lote: '', fechaVencimiento: '', modo: 'caja' }]
+      }
+      const copia = [...prev]
+      copia[index] = { ...copia[index], cantidad: copia[index].cantidad + cantidad }
+      return copia
+    })
   }
 
   function elegirVariante(articulo: Articulo) {
@@ -486,6 +586,14 @@ export function ComprasPage() {
           Agregar
         </Button>
       </Box>
+
+      {tieneClaveApiIA && (
+        <CapturarFoto
+          label={leerFacturaMutation.isPending ? 'Leyendo factura…' : 'Leer factura con foto'}
+          disabled={leerFacturaMutation.isPending}
+          onFoto={(imagen) => leerFacturaMutation.mutate(imagen)}
+        />
+      )}
 
       {/* Cámara embebida en la página (no pantalla completa) — la lista de la compra sigue
           visible mientras se escanea. Se pausa sola mientras el selector de variantes está
@@ -728,6 +836,100 @@ export function ComprasPage() {
         <DialogActions>
           <Button variant="contained" onClick={() => setAvisosSinMargen(null)}>
             Entendido
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!lineasFactura} onClose={() => setLineasFactura(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Revisá la factura leída</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Corregí lo que haga falta antes de confirmar — nada se agrega a la compra todavía.
+              Los productos nuevos necesitan Código, Familia y Talla para poder darlos de alta.
+            </Typography>
+            {(lineasFactura ?? []).map((linea, index) => (
+              <Paper key={index} variant="outlined" sx={{ p: 1.5 }}>
+                <Stack spacing={1}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <Checkbox
+                      size="small"
+                      checked={linea.seleccionada}
+                      onChange={(e) => actualizarLineaFactura(index, { seleccionada: e.target.checked })}
+                    />
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Descripción"
+                      value={linea.descripcion}
+                      onChange={(e) => actualizarLineaFactura(index, { descripcion: e.target.value })}
+                    />
+                    <Chip
+                      size="small"
+                      color={linea.esNuevo ? 'warning' : 'success'}
+                      label={linea.esNuevo ? 'Nuevo' : `Ya existe: ${linea.codigoExistente}`}
+                    />
+                  </Stack>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                    <CampoNumero
+                      size="small"
+                      label="Cantidad"
+                      valorVacio={1}
+                      value={linea.cantidad}
+                      onChange={(cantidad) => actualizarLineaFactura(index, { cantidad })}
+                    />
+                    <CampoNumero
+                      size="small"
+                      label="Costo unitario"
+                      value={linea.costoUnitario}
+                      onChange={(costoUnitario) => actualizarLineaFactura(index, { costoUnitario })}
+                    />
+                  </Box>
+                  {linea.esNuevo && (
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
+                      <TextField
+                        size="small"
+                        label="Código"
+                        required
+                        value={linea.codigoNuevo}
+                        onChange={(e) => actualizarLineaFactura(index, { codigoNuevo: e.target.value })}
+                      />
+                      <TextField
+                        select
+                        size="small"
+                        label="Familia"
+                        required
+                        value={linea.idFamiliaNuevo || ''}
+                        onChange={(e) => actualizarLineaFactura(index, { idFamiliaNuevo: Number(e.target.value) })}
+                      >
+                        {(familiasQuery.data ?? []).map((f) => (
+                          <MenuItem key={f.id} value={f.id}>
+                            {f.nombreFamilia}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <TextField
+                        size="small"
+                        label="Talla"
+                        required
+                        value={linea.tamanoNuevo}
+                        onChange={(e) => actualizarLineaFactura(index, { tamanoNuevo: e.target.value })}
+                      />
+                    </Box>
+                  )}
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLineasFactura(null)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            disabled={confirmarFacturaMutation.isPending || !lineasFacturaListasParaConfirmar}
+            onClick={() => confirmarFacturaMutation.mutate()}
+          >
+            {confirmarFacturaMutation.isPending ? 'Agregando…' : 'Confirmar y agregar a la compra'}
           </Button>
         </DialogActions>
       </Dialog>

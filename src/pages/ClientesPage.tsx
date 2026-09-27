@@ -25,10 +25,14 @@ import SearchIcon from '@mui/icons-material/Search'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import { actualizarCliente, buscarClientes, crearCliente, eliminarCliente } from '../api/clientes'
+import { leerDocumentoCliente } from '../api/ia'
 import { getErrorMessage } from '../api/errors'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ErrorDialog } from '../components/ErrorDialog'
+import { CapturarFoto } from '../components/CapturarFoto'
 import { stickyActionsSx } from '../utils/tableStyles'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import type { Cliente, ClienteFormValues } from '../types/cliente'
 
 const CLIENTES_QUERY_KEY = ['clientes'] as const
@@ -46,6 +50,7 @@ const CLIENTE_VACIO: ClienteFormValues = {
 
 export function ClientesPage() {
   const isMobile = useIsMobile()
+  const { tieneClaveApiIA } = useConfiguracionEmpresa()
   const queryClient = useQueryClient()
   const [busqueda, setBusqueda] = useState('')
   const [dialogAbierto, setDialogAbierto] = useState(false)
@@ -54,6 +59,7 @@ export function ClientesPage() {
   const [errorMutacion, setErrorMutacion] = useState<string | null>(null)
   const [clienteAEliminar, setClienteAEliminar] = useState<Cliente | null>(null)
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null)
+  const [errorDocumento, setErrorDocumento] = useState<string | null>(null)
 
   const clientesQuery = useQuery({
     queryKey: CLIENTES_QUERY_KEY,
@@ -92,6 +98,20 @@ export function ClientesPage() {
       setClienteAEliminar(null)
     },
     onError: (err) => setErrorEliminar(getErrorMessage(err)),
+  })
+
+  const leerDocumentoMutation = useMutation({
+    mutationFn: leerDocumentoCliente,
+    onSuccess: (datos) => {
+      // Solo pisa lo que la IA sí pudo leer — si no pudo leer un dato, deja lo que ya
+      // estaba escrito (por si la persona ya había tipeado algo antes de sacar la foto).
+      setForm((prev) => ({
+        ...prev,
+        nombre: datos.nombre?.trim() || prev.nombre,
+        documentoIdentidad: datos.documentoIdentidad?.trim() || prev.documentoIdentidad,
+      }))
+    },
+    onError: (err) => setErrorDocumento(getErrorMessage(err)),
   })
 
   function abrirNuevo() {
@@ -230,6 +250,13 @@ export function ClientesPage() {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {errorMutacion && <Alert severity="error">{errorMutacion}</Alert>}
+            {!clienteEnEdicion && tieneClaveApiIA && (
+              <CapturarFoto
+                label={leerDocumentoMutation.isPending ? 'Leyendo documento…' : 'Completar con foto de documento'}
+                disabled={leerDocumentoMutation.isPending}
+                onFoto={(imagen) => leerDocumentoMutation.mutate(imagen)}
+              />
+            )}
             <TextField
               label="Nombre"
               required
@@ -306,6 +333,8 @@ export function ClientesPage() {
         onConfirmar={() => clienteAEliminar && eliminarMutation.mutate(clienteAEliminar.id)}
         onCancelar={() => setClienteAEliminar(null)}
       />
+
+      <ErrorDialog mensaje={errorDocumento} onCerrar={() => setErrorDocumento(null)} />
     </Stack>
   )
 }

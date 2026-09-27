@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
+import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
@@ -44,8 +46,12 @@ import { ErrorDialog } from '../components/ErrorDialog'
 import { CampoNumero } from '../components/CampoNumero'
 import { imprimirEtiquetaArticulo } from '../utils/barcode'
 import { agregarEtiquetaPendiente } from '../api/etiquetasPendientes'
+import { interpretarListaProductos } from '../api/ia'
+import { registrarAjusteStock } from '../api/ajusteStock'
 import { obtenerUbicacion, resumenVariante } from '../utils/articulo'
 import { stickyActionsSx } from '../utils/tableStyles'
+import { useAuth } from '../auth/AuthContext'
+import type { LineaTextoProducto } from '../types/ia'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import type { Articulo, ArticuloCaracteristica, ArticuloFormValues } from '../types/articulo'
@@ -85,6 +91,15 @@ interface FilaVariante {
 
 const FILA_VARIANTE_VACIA: FilaVariante = { caracteristicas: [], costoOverride: null, precioOverride: null }
 
+/** Un renglón de la lista de texto interpretada por IA, con lo que hace falta para
+ * revisarlo/confirmarlo: si está tildado, y (solo si es nuevo) el Código/Familia que hace falta
+ * completar para poder darlo de alta. */
+interface LineaTextoProductoEditable extends LineaTextoProducto {
+  seleccionada: boolean
+  codigoNuevo: string
+  idFamiliaNuevo: number
+}
+
 /** Un grupo en el listado: todos los Artículos que comparten Código + Descripción + Familia —
  * o sea, todas las variantes (talla/color) de una misma prenda. Con
  * PermiteCodigoCompartidoEntreArticulos apagado cada artículo es su propio grupo de 1 (el
@@ -116,8 +131,9 @@ function calcularPrecioPorMargen(costo: number, margen: number, redondearEnteros
 
 export function ArticulosPage() {
   const isMobile = useIsMobile()
-  const { money, redondearPreciosEnteros, permiteCodigoCompartidoEntreArticulos } =
+  const { money, redondearPreciosEnteros, permiteCodigoCompartidoEntreArticulos, tieneClaveApiIA } =
     useConfiguracionEmpresa()
+  const { usuario } = useAuth()
   const queryClient = useQueryClient()
   const [busqueda, setBusqueda] = useState('')
   const [dialogAbierto, setDialogAbierto] = useState(false)
@@ -125,6 +141,12 @@ export function ArticulosPage() {
   const [esDuplicado, setEsDuplicado] = useState(false)
   const [form, setForm] = useState<ArticuloFormValues>(ARTICULO_VACIO)
   const [errorMutacion, setErrorMutacion] = useState<string | null>(null)
+  // Alta con lista de texto libre (IA) — mientras dialogListaTextoAbierto es true se muestra el
+  // diálogo; arranca pidiendo el texto (lineasTexto null) y pasa a la revisión apenas la IA
+  // contesta. Ver ConfiguracionEmpresa.tieneClaveApiIA para por qué el botón puede no estar visible.
+  const [dialogListaTextoAbierto, setDialogListaTextoAbierto] = useState(false)
+  const [textoLista, setTextoLista] = useState('')
+  const [lineasTexto, setLineasTexto] = useState<LineaTextoProductoEditable[] | null>(null)
   const [articuloAEliminar, setArticuloAEliminar] = useState<Articulo | null>(null)
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null)
   const [articuloParaEtiqueta, setArticuloParaEtiqueta] = useState<Articulo | null>(null)
@@ -244,6 +266,84 @@ export function ArticulosPage() {
     },
     onError: (err) => setErrorCola(getErrorMessage(err)),
   })
+
+  const interpretarListaMutation = useMutation({
+    mutationFn: interpretarListaProductos,
+    onSuccess: (lineas) => {
+      setLineasTexto(
+        lineas.map((l) => ({ ...l, seleccionada: true, codigoNuevo: '', idFamiliaNuevo: 0 })),
+      )
+    },
+    onError: (err) => setErrorMutacion(getErrorMessage(err)),
+  })
+
+  /** Da de alta los productos nuevos tildados (con el Código/Familia completados) y, para TODOS
+   * los tildados (nuevos + existentes) con cantidad > 0, registra un Ajuste de stock ENTRADA —
+   * ni la IA ni esta función tocan el stock directo, es el mismo Ajuste de stock de siempre. */
+  const confirmarListaMutation = useMutation({
+    mutationFn: async () => {
+      if (!usuario) throw new Error('Falta el usuario logueado.')
+      const seleccionadas = (lineasTexto ?? []).filter((l) => l.seleccionada)
+      for (const linea of seleccionadas) {
+        let idArticulo = linea.idArticuloExistente
+        if (linea.esNuevo) {
+          const tamano = [linea.talla, linea.color].filter((v) => v?.trim()).join(' · ') || linea.codigoNuevo
+          const nuevoArticulo = await articulosApi.create({
+            codigo: linea.codigoNuevo,
+            descripcion: linea.descripcion,
+            tamano,
+            unidadMedida: '',
+            fraccion: 1,
+            precio: 0,
+            costo: 0,
+            precioUnidadSuelta: undefined,
+            margenGanancia: undefined,
+            stockMinimo: undefined,
+            stockIdeal: undefined,
+            imagen: '',
+            idFamilia: linea.idFamiliaNuevo,
+            idPromocion: undefined,
+            caracteristicas: [],
+          })
+          idArticulo = nuevoArticulo.id
+        }
+        if (idArticulo && linea.cantidad > 0) {
+          await registrarAjusteStock({
+            fecha: new Date().toISOString(),
+            tipo: 'ENTRADA',
+            cantidad: linea.cantidad,
+            motivo: 'Alta por lista de texto (IA)',
+            idArticulo,
+            idUsuario: usuario.id,
+          })
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ARTICULOS_QUERY_KEY })
+      queryClient.invalidateQueries({ queryKey: ['stock', 'todos'] })
+      setDialogListaTextoAbierto(false)
+      setTextoLista('')
+      setLineasTexto(null)
+    },
+    onError: (err) => setErrorMutacion(getErrorMessage(err)),
+  })
+
+  function actualizarLineaTexto(index: number, cambios: Partial<LineaTextoProductoEditable>) {
+    setLineasTexto((prev) => (prev ? prev.map((l, i) => (i === index ? { ...l, ...cambios } : l)) : prev))
+  }
+
+  const lineasTextoListasParaConfirmar =
+    (lineasTexto ?? []).some((l) => l.seleccionada) &&
+    (lineasTexto ?? [])
+      .filter((l) => l.seleccionada && l.esNuevo)
+      .every((l) => l.codigoNuevo.trim() && l.idFamiliaNuevo > 0)
+
+  function cerrarDialogListaTexto() {
+    setDialogListaTextoAbierto(false)
+    setTextoLista('')
+    setLineasTexto(null)
+  }
 
   function abrirNuevo() {
     setArticuloEnEdicion(null)
@@ -596,13 +696,20 @@ export function ArticulosPage() {
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           Artículos
         </Typography>
-        <Button
-          startIcon={<AddIcon />}
-          variant="contained"
-          onClick={permiteCodigoCompartidoEntreArticulos ? abrirNuevoConVariantes : abrirNuevo}
-        >
-          Nuevo artículo
-        </Button>
+        <Stack direction="row" spacing={1}>
+          {tieneClaveApiIA && (
+            <Button variant="outlined" onClick={() => setDialogListaTextoAbierto(true)}>
+              Cargar con lista de texto
+            </Button>
+          )}
+          <Button
+            startIcon={<AddIcon />}
+            variant="contained"
+            onClick={permiteCodigoCompartidoEntreArticulos ? abrirNuevoConVariantes : abrirNuevo}
+          >
+            Nuevo artículo
+          </Button>
+        </Stack>
       </Stack>
 
       <TextField
@@ -1431,6 +1538,128 @@ export function ArticulosPage() {
           >
             {editarGrupoMutation.isPending ? 'Guardando…' : 'Guardar'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={dialogListaTextoAbierto} onClose={cerrarDialogListaTexto} maxWidth="sm" fullWidth fullScreen={isMobile}>
+        <DialogTitle>Cargar con lista de texto</DialogTitle>
+        <DialogContent>
+          {lineasTexto == null ? (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                Escribí los productos como se te ocurra, uno por línea o todos juntos — ej. "remera
+                polo azul 4, remera nike rojo talla M 5". La IA los va a separar e identificar cuáles
+                ya tenés cargados.
+              </Typography>
+              <TextField
+                label="Productos"
+                fullWidth
+                multiline
+                minRows={5}
+                value={textoLista}
+                onChange={(e) => setTextoLista(e.target.value)}
+                autoFocus
+              />
+            </Stack>
+          ) : (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                Corregí lo que haga falta antes de confirmar — nada se agrega todavía. Los
+                productos nuevos necesitan Código y Familia para poder darlos de alta.
+              </Typography>
+              {lineasTexto.map((linea, index) => (
+                <Paper key={index} variant="outlined" sx={{ p: 1.5 }}>
+                  <Stack spacing={1}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <Checkbox
+                        size="small"
+                        checked={linea.seleccionada}
+                        onChange={(e) => actualizarLineaTexto(index, { seleccionada: e.target.checked })}
+                      />
+                      <TextField
+                        size="small"
+                        fullWidth
+                        label="Descripción"
+                        value={linea.descripcion}
+                        onChange={(e) => actualizarLineaTexto(index, { descripcion: e.target.value })}
+                      />
+                      <Chip
+                        size="small"
+                        color={linea.esNuevo ? 'warning' : 'success'}
+                        label={linea.esNuevo ? 'Nuevo' : `Ya existe: ${linea.codigoExistente}`}
+                      />
+                    </Stack>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
+                      <TextField
+                        size="small"
+                        label="Talla (opcional)"
+                        value={linea.talla ?? ''}
+                        onChange={(e) => actualizarLineaTexto(index, { talla: e.target.value })}
+                      />
+                      <TextField
+                        size="small"
+                        label="Color (opcional)"
+                        value={linea.color ?? ''}
+                        onChange={(e) => actualizarLineaTexto(index, { color: e.target.value })}
+                      />
+                      <CampoNumero
+                        size="small"
+                        label="Cantidad"
+                        valorVacio={1}
+                        value={linea.cantidad}
+                        onChange={(cantidad) => actualizarLineaTexto(index, { cantidad })}
+                      />
+                    </Box>
+                    {linea.esNuevo && (
+                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+                        <TextField
+                          size="small"
+                          label="Código"
+                          required
+                          value={linea.codigoNuevo}
+                          onChange={(e) => actualizarLineaTexto(index, { codigoNuevo: e.target.value })}
+                        />
+                        <TextField
+                          select
+                          size="small"
+                          label="Familia"
+                          required
+                          value={linea.idFamiliaNuevo || ''}
+                          onChange={(e) => actualizarLineaTexto(index, { idFamiliaNuevo: Number(e.target.value) })}
+                        >
+                          {(familiasQuery.data ?? []).map((f) => (
+                            <MenuItem key={f.id} value={f.id}>
+                              {f.nombreFamilia}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      </Box>
+                    )}
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cerrarDialogListaTexto}>Cancelar</Button>
+          {lineasTexto == null ? (
+            <Button
+              variant="contained"
+              disabled={!textoLista.trim() || interpretarListaMutation.isPending}
+              onClick={() => interpretarListaMutation.mutate(textoLista)}
+            >
+              {interpretarListaMutation.isPending ? 'Interpretando…' : 'Interpretar'}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              disabled={confirmarListaMutation.isPending || !lineasTextoListasParaConfirmar}
+              onClick={() => confirmarListaMutation.mutate()}
+            >
+              {confirmarListaMutation.isPending ? 'Guardando…' : 'Confirmar'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
