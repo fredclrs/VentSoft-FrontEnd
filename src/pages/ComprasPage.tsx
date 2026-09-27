@@ -43,23 +43,26 @@ import { actualizarPrecioArticulo, articulosApi, buscarArticulos, getStockTodos 
 import { familiasApi } from '../api/familias'
 import { registrarCompra } from '../api/compras'
 import { leerFactura } from '../api/ia'
+import { caracteristicasApi } from '../api/caracteristicas'
 import { CapturarFoto } from '../components/CapturarFoto'
 import { useAuth } from '../auth/AuthContext'
 import { getErrorMessage } from '../api/errors'
 import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import type { Proveedor } from '../types/proveedor'
-import type { Articulo } from '../types/articulo'
+import type { Articulo, ArticuloCaracteristica } from '../types/articulo'
 import type { AvisoSinMargen, PrecioSugerido, RegistrarDetalleCompra } from '../types/compra'
 import type { LineaFactura } from '../types/ia'
 
 /** Un renglón de la factura leída por IA, con lo que hace falta para revisarlo/confirmarlo en
  * pantalla: si está tildado para agregar, y (solo si es nuevo) los datos que hacen falta
- * completar para poder darlo de alta como Artículo. */
+ * completar para poder darlo de alta como Artículo. caracteristicasEditadas arranca con lo que
+ * la IA leyó (ya resuelto contra el catálogo del negocio cuando fue posible) pero la persona
+ * puede agregar/corregir/quitar filas igual que en el alta manual ("+ Variante"). */
 interface LineaFacturaEditable extends LineaFactura {
   seleccionada: boolean
   codigoNuevo: string
   idFamiliaNuevo: number
-  tamanoNuevo: string
+  caracteristicasEditadas: ArticuloCaracteristica[]
 }
 
 interface LineaCompra {
@@ -130,6 +133,9 @@ export function ComprasPage() {
   const articulosQuery = useQuery({ queryKey: ['articulos'], queryFn: () => articulosApi.search() })
   // Solo hace falta si la IA encuentra productos nuevos en la factura (para elegirles Familia).
   const familiasQuery = useQuery({ queryKey: ['familias'], queryFn: () => familiasApi.search() })
+  // Catálogo de atributos del negocio (talla/color en indumentaria, u otros según el rubro) —
+  // para completar/corregir las Caracteristicas que la IA leyó de la factura.
+  const caracteristicasQuery = useQuery({ queryKey: ['caracteristicas'], queryFn: () => caracteristicasApi.search() })
   // Solo para mostrar el stock actual en el selector de variantes (ver más abajo) — a diferencia
   // de Ventas, acá no bloquea nada (comprar no depende del stock).
   const stockQuery = useQuery({ queryKey: ['stock', 'todos'], queryFn: getStockTodos })
@@ -272,12 +278,66 @@ export function ComprasPage() {
           // se precargan (y quedan fijos en la pantalla) en vez de pedírselos a la persona.
           codigoNuevo: l.codigoGrupo ?? '',
           idFamiliaNuevo: l.idFamiliaGrupo ?? 0,
-          tamanoNuevo: '',
+          caracteristicasEditadas: l.caracteristicas.map((c) => ({
+            id: 0,
+            idCaracteristica: c.idCaracteristica || caracteristicasQuery.data?.[0]?.id || 0,
+            nombreCaracteristica: c.nombreCaracteristica,
+            valor: c.valor,
+          })),
         })),
       )
     },
     onError: (err) => setErrorMutacion(getErrorMessage(err)),
   })
+
+  /** El "Tamaño" que exige la base se arma solo uniendo los valores de las características de
+   * la línea (ej. "40 · Azul") — mismo criterio que tamanoDeFila en el alta manual. */
+  function tamanoDeLineaFactura(linea: LineaFacturaEditable): string {
+    return linea.caracteristicasEditadas
+      .map((c) => c.valor.trim())
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  function agregarCaracteristicaLineaFactura(index: number) {
+    const primera = caracteristicasQuery.data?.[0]
+    if (!primera) return
+    actualizarLineaFactura(index, {
+      caracteristicasEditadas: [
+        ...(lineasFactura?.[index]?.caracteristicasEditadas ?? []),
+        { id: 0, idCaracteristica: primera.id, nombreCaracteristica: primera.nombreCaracteristica, valor: '' },
+      ],
+    })
+  }
+
+  function actualizarCaracteristicaLineaFactura(
+    index: number,
+    indexCaract: number,
+    cambios: Partial<ArticuloCaracteristica>,
+  ) {
+    setLineasFactura((prev) =>
+      prev
+        ? prev.map((l, i) => {
+            if (i !== index) return l
+            const copia = [...l.caracteristicasEditadas]
+            copia[indexCaract] = { ...copia[indexCaract], ...cambios }
+            return { ...l, caracteristicasEditadas: copia }
+          })
+        : prev,
+    )
+  }
+
+  function quitarCaracteristicaLineaFactura(index: number, indexCaract: number) {
+    setLineasFactura((prev) =>
+      prev
+        ? prev.map((l, i) =>
+            i === index
+              ? { ...l, caracteristicasEditadas: l.caracteristicasEditadas.filter((_, j) => j !== indexCaract) }
+              : l,
+          )
+        : prev,
+    )
+  }
 
   /** Da de alta los productos nuevos/variantes nuevas que vinieron marcados en la factura (uno
    * por uno, para poder usar el Id que devuelve cada alta) y agrega TODAS las líneas tildadas
@@ -291,7 +351,7 @@ export function ComprasPage() {
           const nuevoArticulo = await articulosApi.create({
             codigo: linea.codigoNuevo,
             descripcion: linea.descripcion,
-            tamano: linea.tamanoNuevo,
+            tamano: tamanoDeLineaFactura(linea),
             unidadMedida: '',
             fraccion: 1,
             precio: linea.costoUnitario,
@@ -303,7 +363,9 @@ export function ComprasPage() {
             imagen: '',
             idFamilia: linea.idFamiliaNuevo,
             idPromocion: undefined,
-            caracteristicas: [],
+            caracteristicas: linea.caracteristicasEditadas
+              .filter((c) => c.valor.trim())
+              .map((c) => ({ ...c, valor: c.valor.trim() })),
           })
           agregarLineaDesdeIA(nuevoArticulo, linea.cantidad, linea.costoUnitario)
         } else {
@@ -348,10 +410,10 @@ export function ComprasPage() {
     (lineasFactura ?? []).some((l) => l.seleccionada) &&
     (lineasFactura ?? [])
       .filter((l) => l.seleccionada && l.esNuevo)
-      .every((l) => l.codigoNuevo.trim() && l.idFamiliaNuevo > 0 && l.tamanoNuevo.trim()) &&
+      .every((l) => l.codigoNuevo.trim() && l.idFamiliaNuevo > 0 && tamanoDeLineaFactura(l)) &&
     (lineasFactura ?? [])
       .filter((l) => l.seleccionada && l.esVarianteNueva)
-      .every((l) => l.tamanoNuevo.trim())
+      .every((l) => tamanoDeLineaFactura(l))
 
   function agregarLinea() {
     if (!articuloParaAgregar) return
@@ -851,7 +913,8 @@ export function ComprasPage() {
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Typography variant="body2" color="text.secondary">
               Corregí lo que haga falta antes de confirmar — nada se agrega a la compra todavía.
-              Los productos nuevos necesitan Código, Familia y Talla para poder darlos de alta.
+              Los productos nuevos necesitan Código, Familia y al menos un atributo (talla,
+              color, u otro según el rubro) para poder darlos de alta.
             </Typography>
             {(lineasFactura ?? []).map((linea, index) => (
               <Paper key={index} variant="outlined" sx={{ p: 1.5 }}>
@@ -896,56 +959,96 @@ export function ComprasPage() {
                       onChange={(costoUnitario) => actualizarLineaFactura(index, { costoUnitario })}
                     />
                   </Box>
-                  {linea.esNuevo && (
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
-                      <TextField
-                        size="small"
-                        label="Código"
-                        required
-                        value={linea.codigoNuevo}
-                        onChange={(e) => actualizarLineaFactura(index, { codigoNuevo: e.target.value })}
-                      />
-                      <TextField
-                        select
-                        size="small"
-                        label="Familia"
-                        required
-                        value={linea.idFamiliaNuevo || ''}
-                        onChange={(e) => actualizarLineaFactura(index, { idFamiliaNuevo: Number(e.target.value) })}
-                      >
-                        {(familiasQuery.data ?? []).map((f) => (
-                          <MenuItem key={f.id} value={f.id}>
-                            {f.nombreFamilia}
-                          </MenuItem>
+                  {(linea.esNuevo || linea.esVarianteNueva) && (
+                    <Stack spacing={1}>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+                        <TextField
+                          size="small"
+                          label="Código"
+                          required={linea.esNuevo}
+                          disabled={linea.esVarianteNueva}
+                          value={linea.codigoNuevo}
+                          onChange={(e) => actualizarLineaFactura(index, { codigoNuevo: e.target.value })}
+                        />
+                        {linea.esNuevo ? (
+                          <TextField
+                            select
+                            size="small"
+                            label="Familia"
+                            required
+                            value={linea.idFamiliaNuevo || ''}
+                            onChange={(e) => actualizarLineaFactura(index, { idFamiliaNuevo: Number(e.target.value) })}
+                          >
+                            {(familiasQuery.data ?? []).map((f) => (
+                              <MenuItem key={f.id} value={f.id}>
+                                {f.nombreFamilia}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        ) : (
+                          <TextField
+                            size="small"
+                            label="Familia"
+                            disabled
+                            value={familiasQuery.data?.find((f) => f.id === linea.idFamiliaNuevo)?.nombreFamilia ?? ''}
+                          />
+                        )}
+                      </Box>
+                      {/* Atributos de la variante (talla, color, u otros según el rubro del
+                          negocio) — la IA ya sugirió filas si los leyó/interpretó, acá se pueden
+                          corregir/agregar/quitar igual que en el alta manual ("+ Variante"). */}
+                      <Stack spacing={0.5}>
+                        {linea.caracteristicasEditadas.map((c, indexCaract) => (
+                          <Stack key={indexCaract} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                            <TextField
+                              select
+                              size="small"
+                              label="Atributo"
+                              sx={{ minWidth: 130 }}
+                              value={c.idCaracteristica || ''}
+                              onChange={(e) => {
+                                const idCaracteristica = Number(e.target.value)
+                                const nombre = caracteristicasQuery.data?.find((x) => x.id === idCaracteristica)
+                                  ?.nombreCaracteristica
+                                actualizarCaracteristicaLineaFactura(index, indexCaract, {
+                                  idCaracteristica,
+                                  nombreCaracteristica: nombre,
+                                })
+                              }}
+                            >
+                              {(caracteristicasQuery.data ?? []).map((carac) => (
+                                <MenuItem key={carac.id} value={carac.id}>
+                                  {carac.nombreCaracteristica}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                            <TextField
+                              size="small"
+                              label="Valor"
+                              fullWidth
+                              value={c.valor}
+                              onChange={(e) => actualizarCaracteristicaLineaFactura(index, indexCaract, { valor: e.target.value })}
+                            />
+                            <IconButton size="small" color="error" onClick={() => quitarCaracteristicaLineaFactura(index, indexCaract)}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Stack>
                         ))}
-                      </TextField>
-                      <TextField
-                        size="small"
-                        label="Talla"
-                        required
-                        value={linea.tamanoNuevo}
-                        onChange={(e) => actualizarLineaFactura(index, { tamanoNuevo: e.target.value })}
-                      />
-                    </Box>
-                  )}
-                  {linea.esVarianteNueva && (
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
-                      <TextField size="small" label="Código" disabled value={linea.codigoNuevo} />
-                      <TextField
-                        size="small"
-                        label="Familia"
-                        disabled
-                        value={familiasQuery.data?.find((f) => f.id === linea.idFamiliaNuevo)?.nombreFamilia ?? ''}
-                      />
-                      <TextField
-                        size="small"
-                        label="Talla/color de esta variante"
-                        required
-                        autoFocus
-                        value={linea.tamanoNuevo}
-                        onChange={(e) => actualizarLineaFactura(index, { tamanoNuevo: e.target.value })}
-                      />
-                    </Box>
+                        <Button
+                          size="small"
+                          disabled={!caracteristicasQuery.data?.length}
+                          onClick={() => agregarCaracteristicaLineaFactura(index)}
+                        >
+                          + Atributo
+                        </Button>
+                        {!caracteristicasQuery.isLoading && (caracteristicasQuery.data?.length ?? 0) === 0 && (
+                          <Typography variant="caption" color="text.secondary">
+                            Este negocio todavía no tiene atributos cargados (Talla, Color, etc.) —
+                            se puede crear el producto igual, sin ningún atributo.
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Stack>
                   )}
                 </Stack>
               </Paper>

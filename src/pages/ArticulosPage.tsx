@@ -93,11 +93,14 @@ const FILA_VARIANTE_VACIA: FilaVariante = { caracteristicas: [], costoOverride: 
 
 /** Un renglón de la lista de texto interpretada por IA, con lo que hace falta para
  * revisarlo/confirmarlo: si está tildado, y (solo si es nuevo) el Código/Familia que hace falta
- * completar para poder darlo de alta. */
+ * completar para poder darlo de alta. caracteristicasEditadas arranca con lo que la IA leyó (ya
+ * resuelto contra el catálogo del negocio cuando fue posible) pero se puede corregir/agregar/
+ * quitar filas igual que en "Nuevo producto (variantes)". */
 interface LineaTextoProductoEditable extends LineaTextoProducto {
   seleccionada: boolean
   codigoNuevo: string
   idFamiliaNuevo: number
+  caracteristicasEditadas: ArticuloCaracteristica[]
 }
 
 /** Un grupo en el listado: todos los Artículos que comparten Código + Descripción + Familia —
@@ -278,11 +281,62 @@ export function ArticulosPage() {
           // precargan (y quedan fijos en la pantalla) en vez de pedírselos a la persona.
           codigoNuevo: l.codigoGrupo ?? '',
           idFamiliaNuevo: l.idFamiliaGrupo ?? 0,
+          caracteristicasEditadas: l.caracteristicas.map((c) => ({
+            id: 0,
+            idCaracteristica: c.idCaracteristica || caracteristicasQuery.data?.[0]?.id || 0,
+            nombreCaracteristica: c.nombreCaracteristica,
+            valor: c.valor,
+          })),
         })),
       )
     },
     onError: (err) => setErrorMutacion(getErrorMessage(err)),
   })
+
+  /** El "Tamaño" que exige la base se arma uniendo los valores de las características de la
+   * línea (ej. "40 · Azul") — mismo criterio que tamanoDeFila en "Nuevo producto (variantes)". */
+  function tamanoDeLineaTexto(linea: LineaTextoProductoEditable): string {
+    return linea.caracteristicasEditadas
+      .map((c) => c.valor.trim())
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  function agregarCaracteristicaLineaTexto(index: number) {
+    const primera = caracteristicasQuery.data?.[0]
+    if (!primera) return
+    actualizarLineaTexto(index, {
+      caracteristicasEditadas: [
+        ...(lineasTexto?.[index]?.caracteristicasEditadas ?? []),
+        { id: 0, idCaracteristica: primera.id, nombreCaracteristica: primera.nombreCaracteristica, valor: '' },
+      ],
+    })
+  }
+
+  function actualizarCaracteristicaLineaTexto(index: number, indexCaract: number, cambios: Partial<ArticuloCaracteristica>) {
+    setLineasTexto((prev) =>
+      prev
+        ? prev.map((l, i) => {
+            if (i !== index) return l
+            const copia = [...l.caracteristicasEditadas]
+            copia[indexCaract] = { ...copia[indexCaract], ...cambios }
+            return { ...l, caracteristicasEditadas: copia }
+          })
+        : prev,
+    )
+  }
+
+  function quitarCaracteristicaLineaTexto(index: number, indexCaract: number) {
+    setLineasTexto((prev) =>
+      prev
+        ? prev.map((l, i) =>
+            i === index
+              ? { ...l, caracteristicasEditadas: l.caracteristicasEditadas.filter((_, j) => j !== indexCaract) }
+              : l,
+          )
+        : prev,
+    )
+  }
 
   /** Da de alta los productos nuevos tildados (con el Código/Familia completados) y, para TODOS
    * los tildados (nuevos + existentes) con cantidad > 0, registra un Ajuste de stock ENTRADA —
@@ -294,7 +348,7 @@ export function ArticulosPage() {
       for (const linea of seleccionadas) {
         let idArticulo = linea.idArticuloExistente
         if (linea.esNuevo || linea.esVarianteNueva) {
-          const tamano = [linea.talla, linea.color].filter((v) => v?.trim()).join(' · ') || linea.codigoNuevo
+          const tamano = tamanoDeLineaTexto(linea) || linea.codigoNuevo
           const nuevoArticulo = await articulosApi.create({
             codigo: linea.codigoNuevo,
             descripcion: linea.descripcion,
@@ -310,7 +364,9 @@ export function ArticulosPage() {
             imagen: '',
             idFamilia: linea.idFamiliaNuevo,
             idPromocion: undefined,
-            caracteristicas: [],
+            caracteristicas: linea.caracteristicasEditadas
+              .filter((c) => c.valor.trim())
+              .map((c) => ({ ...c, valor: c.valor.trim() })),
           })
           idArticulo = nuevoArticulo.id
         }
@@ -347,7 +403,7 @@ export function ArticulosPage() {
       .every((l) => l.codigoNuevo.trim() && l.idFamiliaNuevo > 0) &&
     (lineasTexto ?? [])
       .filter((l) => l.seleccionada && l.esVarianteNueva)
-      .every((l) => l.talla?.trim() || l.color?.trim())
+      .every((l) => tamanoDeLineaTexto(l))
 
   function cerrarDialogListaTexto() {
     setDialogListaTextoAbierto(false)
@@ -1575,7 +1631,9 @@ export function ArticulosPage() {
             <Stack spacing={2} sx={{ mt: 1 }}>
               <Typography variant="body2" color="text.secondary">
                 Corregí lo que haga falta antes de confirmar — nada se agrega todavía. Los
-                productos nuevos necesitan Código y Familia para poder darlos de alta.
+                productos nuevos necesitan Código y Familia para poder darlos de alta; las
+                variantes nuevas de un producto ya existente necesitan al menos un atributo
+                (talla, color, u otro según el rubro) para distinguirlas.
               </Typography>
               {lineasTexto.map((linea, index) => (
                 <Paper key={index} variant="outlined" sx={{ p: 1.5 }}>
@@ -1605,19 +1663,7 @@ export function ArticulosPage() {
                         }
                       />
                     </Stack>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
-                      <TextField
-                        size="small"
-                        label="Talla (opcional)"
-                        value={linea.talla ?? ''}
-                        onChange={(e) => actualizarLineaTexto(index, { talla: e.target.value })}
-                      />
-                      <TextField
-                        size="small"
-                        label="Color (opcional)"
-                        value={linea.color ?? ''}
-                        onChange={(e) => actualizarLineaTexto(index, { color: e.target.value })}
-                      />
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr' }, gap: 1 }}>
                       <CampoNumero
                         size="small"
                         label="Cantidad"
@@ -1626,41 +1672,90 @@ export function ArticulosPage() {
                         onChange={(cantidad) => actualizarLineaTexto(index, { cantidad })}
                       />
                     </Box>
-                    {linea.esNuevo && (
-                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
-                        <TextField
-                          size="small"
-                          label="Código"
-                          required
-                          value={linea.codigoNuevo}
-                          onChange={(e) => actualizarLineaTexto(index, { codigoNuevo: e.target.value })}
-                        />
-                        <TextField
-                          select
-                          size="small"
-                          label="Familia"
-                          required
-                          value={linea.idFamiliaNuevo || ''}
-                          onChange={(e) => actualizarLineaTexto(index, { idFamiliaNuevo: Number(e.target.value) })}
-                        >
-                          {(familiasQuery.data ?? []).map((f) => (
-                            <MenuItem key={f.id} value={f.id}>
-                              {f.nombreFamilia}
-                            </MenuItem>
+                    {(linea.esNuevo || linea.esVarianteNueva) && (
+                      <Stack spacing={1}>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+                          <TextField
+                            size="small"
+                            label="Código"
+                            required={linea.esNuevo}
+                            disabled={linea.esVarianteNueva}
+                            value={linea.codigoNuevo}
+                            onChange={(e) => actualizarLineaTexto(index, { codigoNuevo: e.target.value })}
+                          />
+                          {linea.esNuevo ? (
+                            <TextField
+                              select
+                              size="small"
+                              label="Familia"
+                              required
+                              value={linea.idFamiliaNuevo || ''}
+                              onChange={(e) => actualizarLineaTexto(index, { idFamiliaNuevo: Number(e.target.value) })}
+                            >
+                              {(familiasQuery.data ?? []).map((f) => (
+                                <MenuItem key={f.id} value={f.id}>
+                                  {f.nombreFamilia}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                          ) : (
+                            <TextField
+                              size="small"
+                              label="Familia"
+                              disabled
+                              value={familiasQuery.data?.find((f) => f.id === linea.idFamiliaNuevo)?.nombreFamilia ?? ''}
+                            />
+                          )}
+                        </Box>
+                        {/* Atributos de la variante (talla, color, u otros según el rubro del
+                            negocio) — la IA ya sugirió filas si los leyó, acá se pueden
+                            corregir/agregar/quitar igual que en "Nuevo producto (variantes)". */}
+                        <Stack spacing={0.5}>
+                          {linea.caracteristicasEditadas.map((c, indexCaract) => (
+                            <Stack key={indexCaract} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                              <TextField
+                                select
+                                size="small"
+                                label="Atributo"
+                                sx={{ minWidth: 130 }}
+                                value={c.idCaracteristica || ''}
+                                onChange={(e) => {
+                                  const idCaracteristica = Number(e.target.value)
+                                  const nombre = caracteristicasQuery.data?.find((x) => x.id === idCaracteristica)
+                                    ?.nombreCaracteristica
+                                  actualizarCaracteristicaLineaTexto(index, indexCaract, {
+                                    idCaracteristica,
+                                    nombreCaracteristica: nombre,
+                                  })
+                                }}
+                              >
+                                {(caracteristicasQuery.data ?? []).map((carac) => (
+                                  <MenuItem key={carac.id} value={carac.id}>
+                                    {carac.nombreCaracteristica}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                              <TextField
+                                size="small"
+                                label="Valor"
+                                fullWidth
+                                value={c.valor}
+                                onChange={(e) => actualizarCaracteristicaLineaTexto(index, indexCaract, { valor: e.target.value })}
+                              />
+                              <IconButton size="small" color="error" onClick={() => quitarCaracteristicaLineaTexto(index, indexCaract)}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Stack>
                           ))}
-                        </TextField>
-                      </Box>
-                    )}
-                    {linea.esVarianteNueva && (
-                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
-                        <TextField size="small" label="Código" disabled value={linea.codigoNuevo} />
-                        <TextField
-                          size="small"
-                          label="Familia"
-                          disabled
-                          value={familiasQuery.data?.find((f) => f.id === linea.idFamiliaNuevo)?.nombreFamilia ?? ''}
-                        />
-                      </Box>
+                          <Button
+                            size="small"
+                            disabled={!caracteristicasQuery.data?.length}
+                            onClick={() => agregarCaracteristicaLineaTexto(index)}
+                          >
+                            + Atributo
+                          </Button>
+                        </Stack>
+                      </Stack>
                     )}
                   </Stack>
                 </Paper>
