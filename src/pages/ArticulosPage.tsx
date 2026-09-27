@@ -271,7 +271,14 @@ export function ArticulosPage() {
     mutationFn: interpretarListaProductos,
     onSuccess: (lineas) => {
       setLineasTexto(
-        lineas.map((l) => ({ ...l, seleccionada: true, codigoNuevo: '', idFamiliaNuevo: 0 })),
+        lineas.map((l) => ({
+          ...l,
+          seleccionada: true,
+          // Si es variante nueva de un grupo ya existente, el Código/Familia ya se conocen — se
+          // precargan (y quedan fijos en la pantalla) en vez de pedírselos a la persona.
+          codigoNuevo: l.codigoGrupo ?? '',
+          idFamiliaNuevo: l.idFamiliaGrupo ?? 0,
+        })),
       )
     },
     onError: (err) => setErrorMutacion(getErrorMessage(err)),
@@ -286,7 +293,7 @@ export function ArticulosPage() {
       const seleccionadas = (lineasTexto ?? []).filter((l) => l.seleccionada)
       for (const linea of seleccionadas) {
         let idArticulo = linea.idArticuloExistente
-        if (linea.esNuevo) {
+        if (linea.esNuevo || linea.esVarianteNueva) {
           const tamano = [linea.talla, linea.color].filter((v) => v?.trim()).join(' · ') || linea.codigoNuevo
           const nuevoArticulo = await articulosApi.create({
             codigo: linea.codigoNuevo,
@@ -337,7 +344,10 @@ export function ArticulosPage() {
     (lineasTexto ?? []).some((l) => l.seleccionada) &&
     (lineasTexto ?? [])
       .filter((l) => l.seleccionada && l.esNuevo)
-      .every((l) => l.codigoNuevo.trim() && l.idFamiliaNuevo > 0)
+      .every((l) => l.codigoNuevo.trim() && l.idFamiliaNuevo > 0) &&
+    (lineasTexto ?? [])
+      .filter((l) => l.seleccionada && l.esVarianteNueva)
+      .every((l) => l.talla?.trim() || l.color?.trim())
 
   function cerrarDialogListaTexto() {
     setDialogListaTextoAbierto(false)
@@ -1585,8 +1595,14 @@ export function ArticulosPage() {
                       />
                       <Chip
                         size="small"
-                        color={linea.esNuevo ? 'warning' : 'success'}
-                        label={linea.esNuevo ? 'Nuevo' : `Ya existe: ${linea.codigoExistente}`}
+                        color={linea.esNuevo ? 'warning' : linea.esVarianteNueva ? 'info' : 'success'}
+                        label={
+                          linea.esNuevo
+                            ? 'Nuevo'
+                            : linea.esVarianteNueva
+                              ? `Variante nueva de ${linea.codigoGrupo}`
+                              : `Ya existe: ${linea.codigoExistente}`
+                        }
                       />
                     </Stack>
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
@@ -1633,6 +1649,17 @@ export function ArticulosPage() {
                             </MenuItem>
                           ))}
                         </TextField>
+                      </Box>
+                    )}
+                    {linea.esVarianteNueva && (
+                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+                        <TextField size="small" label="Código" disabled value={linea.codigoNuevo} />
+                        <TextField
+                          size="small"
+                          label="Familia"
+                          disabled
+                          value={familiasQuery.data?.find((f) => f.id === linea.idFamiliaNuevo)?.nombreFamilia ?? ''}
+                        />
                       </Box>
                     )}
                   </Stack>

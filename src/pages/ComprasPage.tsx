@@ -268,8 +268,10 @@ export function ComprasPage() {
         lineas.map((l) => ({
           ...l,
           seleccionada: true,
-          codigoNuevo: '',
-          idFamiliaNuevo: 0,
+          // Si es variante nueva de un grupo ya existente, el Código/Familia ya se conocen —
+          // se precargan (y quedan fijos en la pantalla) en vez de pedírselos a la persona.
+          codigoNuevo: l.codigoGrupo ?? '',
+          idFamiliaNuevo: l.idFamiliaGrupo ?? 0,
           tamanoNuevo: '',
         })),
       )
@@ -277,15 +279,15 @@ export function ComprasPage() {
     onError: (err) => setErrorMutacion(getErrorMessage(err)),
   })
 
-  /** Da de alta los productos nuevos que vinieron marcados en la factura (uno por uno, para
-   * poder usar el Id que devuelve cada alta) y agrega TODAS las líneas tildadas (nuevas +
-   * existentes) al carrito de esta compra — no toca registrarCompra ni el resto del flujo, la
-   * IA solo termina llenando "lineas" igual que ya hace el escaneo/búsqueda manual. */
+  /** Da de alta los productos nuevos/variantes nuevas que vinieron marcados en la factura (uno
+   * por uno, para poder usar el Id que devuelve cada alta) y agrega TODAS las líneas tildadas
+   * (nuevas + existentes) al carrito de esta compra — no toca registrarCompra ni el resto del
+   * flujo, la IA solo termina llenando "lineas" igual que ya hace el escaneo/búsqueda manual. */
   const confirmarFacturaMutation = useMutation({
     mutationFn: async () => {
       const seleccionadas = (lineasFactura ?? []).filter((l) => l.seleccionada)
       for (const linea of seleccionadas) {
-        if (linea.esNuevo) {
+        if (linea.esNuevo || linea.esVarianteNueva) {
           const nuevoArticulo = await articulosApi.create({
             codigo: linea.codigoNuevo,
             descripcion: linea.descripcion,
@@ -346,7 +348,10 @@ export function ComprasPage() {
     (lineasFactura ?? []).some((l) => l.seleccionada) &&
     (lineasFactura ?? [])
       .filter((l) => l.seleccionada && l.esNuevo)
-      .every((l) => l.codigoNuevo.trim() && l.idFamiliaNuevo > 0 && l.tamanoNuevo.trim())
+      .every((l) => l.codigoNuevo.trim() && l.idFamiliaNuevo > 0 && l.tamanoNuevo.trim()) &&
+    (lineasFactura ?? [])
+      .filter((l) => l.seleccionada && l.esVarianteNueva)
+      .every((l) => l.tamanoNuevo.trim())
 
   function agregarLinea() {
     if (!articuloParaAgregar) return
@@ -866,8 +871,14 @@ export function ComprasPage() {
                     />
                     <Chip
                       size="small"
-                      color={linea.esNuevo ? 'warning' : 'success'}
-                      label={linea.esNuevo ? 'Nuevo' : `Ya existe: ${linea.codigoExistente}`}
+                      color={linea.esNuevo ? 'warning' : linea.esVarianteNueva ? 'info' : 'success'}
+                      label={
+                        linea.esNuevo
+                          ? 'Nuevo'
+                          : linea.esVarianteNueva
+                            ? `Variante nueva de ${linea.codigoGrupo}`
+                            : `Ya existe: ${linea.codigoExistente}`
+                      }
                     />
                   </Stack>
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
@@ -912,6 +923,25 @@ export function ComprasPage() {
                         size="small"
                         label="Talla"
                         required
+                        value={linea.tamanoNuevo}
+                        onChange={(e) => actualizarLineaFactura(index, { tamanoNuevo: e.target.value })}
+                      />
+                    </Box>
+                  )}
+                  {linea.esVarianteNueva && (
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
+                      <TextField size="small" label="Código" disabled value={linea.codigoNuevo} />
+                      <TextField
+                        size="small"
+                        label="Familia"
+                        disabled
+                        value={familiasQuery.data?.find((f) => f.id === linea.idFamiliaNuevo)?.nombreFamilia ?? ''}
+                      />
+                      <TextField
+                        size="small"
+                        label="Talla/color de esta variante"
+                        required
+                        autoFocus
                         value={linea.tamanoNuevo}
                         onChange={(e) => actualizarLineaFactura(index, { tamanoNuevo: e.target.value })}
                       />
