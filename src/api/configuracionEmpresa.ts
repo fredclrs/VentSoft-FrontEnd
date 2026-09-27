@@ -15,6 +15,12 @@ export interface ActualizarConfiguracionEmpresaInput {
   permiteCompraACredito: boolean
   redondearPreciosEnteros: boolean
   permiteCodigoCompartidoEntreArticulos: boolean
+  /** Solo mandar si se está cargando o reemplazando la clave — dejar sin mandar (undefined) para
+   * no tocar la que ya estaba guardada (nunca se la devolvemos, así que no hay forma de
+   * "reenviarla sin querer"). */
+  claveApiIA?: string
+  /** true para sacar la clave configurada — pensado para un botón "Quitar clave" aparte. */
+  eliminarClaveApiIA?: boolean
   idClientePorDefecto?: number | null
   idProveedorPorDefecto?: number | null
 }

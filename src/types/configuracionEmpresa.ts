@@ -18,6 +18,9 @@ export interface ConfiguracionEmpresa {
    * tallas/colores de una prenda, tintes de una pintura). Por defecto false — el Código sigue
    * siendo único, como conviene a la mayoría de los rubros. */
   permiteCodigoCompartidoEntreArticulos: boolean
+  /** Si ya hay una API key de IA configurada — nunca se manda la clave real de vuelta, solo si
+   * existe o no (ver ActualizarConfiguracionEmpresaInput para cómo se carga/cambia/saca). */
+  tieneClaveApiIA: boolean
   idClientePorDefecto?: number | null
   idProveedorPorDefecto?: number | null
   /** Datos completos del cliente/proveedor por defecto, listos para preseleccionar en

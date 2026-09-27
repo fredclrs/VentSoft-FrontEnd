@@ -7,12 +7,18 @@ import Checkbox from '@mui/material/Checkbox'
 import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import FormControlLabel from '@mui/material/FormControlLabel'
+import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment'
+import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import SaveIcon from '@mui/icons-material/SaveOutlined'
+import VisibilityIcon from '@mui/icons-material/VisibilityOutlined'
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOffOutlined'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { actualizarConfiguracionEmpresa } from '../api/configuracionEmpresa'
 import { buscarClientesTexto } from '../api/clientes'
 import { buscarProveedoresTexto } from '../api/proveedores'
@@ -32,6 +38,12 @@ export function ConfiguracionEmpresaPage() {
   const [permiteCodigoCompartidoEntreArticulos, setPermiteCodigoCompartidoEntreArticulos] = useState(false)
   const [clientePorDefecto, setClientePorDefecto] = useState<Cliente | null>(null)
   const [proveedorPorDefecto, setProveedorPorDefecto] = useState<Proveedor | null>(null)
+  // La clave de IA nunca se precarga (el backend no la devuelve, ver ConfiguracionEmpresa.tsx) —
+  // este campo arranca siempre vacío; "tieneClaveApiIA" de la consulta es lo único que dice si
+  // ya hay una guardada.
+  const [claveApiIA, setClaveApiIA] = useState('')
+  const [mostrarClave, setMostrarClave] = useState(false)
+  const [confirmarQuitarClave, setConfirmarQuitarClave] = useState(false)
   const [guardadoOk, setGuardadoOk] = useState(false)
 
   // Cuando llega la configuración guardada, precarga los campos (solo la primera vez que llega).
@@ -55,8 +67,27 @@ export function ConfiguracionEmpresaPage() {
       // query: al invalidar, se actualizan solas en cuanto se guarda, sin recargar la página.
       queryClient.invalidateQueries({ queryKey: CONFIGURACION_EMPRESA_QUERY_KEY })
       setGuardadoOk(true)
+      // Nunca se deja el texto tipeado a la vista después de guardar — ya quedó guardada en el
+      // servidor, "tieneClaveApiIA" es lo que informa el estado de ahí en más.
+      setClaveApiIA('')
+      setConfirmarQuitarClave(false)
     },
   })
+
+  /** Todos los campos "normales" del formulario, tal como están ahora — para no repetirlos en
+   * los dos lugares que guardan (el botón "Guardar" y el de "Quitar clave"). */
+  function datosFormulario() {
+    return {
+      nombre: nombre.trim(),
+      moneda: moneda.trim(),
+      permiteVentaACredito,
+      permiteCompraACredito,
+      redondearPreciosEnteros,
+      permiteCodigoCompartidoEntreArticulos,
+      idClientePorDefecto: clientePorDefecto?.id ?? null,
+      idProveedorPorDefecto: proveedorPorDefecto?.id ?? null,
+    }
+  }
 
   return (
     <Stack spacing={3}>
@@ -202,6 +233,57 @@ export function ConfiguracionEmpresaPage() {
 
             <div>
               <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                IA (opcional)
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Para las funciones de IA (leer facturas por foto, completar productos, etc.).
+                Cada negocio paga su propio uso — se genera en{' '}
+                <Link href="https://console.anthropic.com" target="_blank" rel="noopener">
+                  console.anthropic.com
+                </Link>{' '}
+                → API Keys → Create Key.
+              </Typography>
+              <TextField
+                label="Clave de IA (API Key)"
+                fullWidth
+                type={mostrarClave ? 'text' : 'password'}
+                value={claveApiIA}
+                onChange={(e) => {
+                  setClaveApiIA(e.target.value)
+                  setGuardadoOk(false)
+                }}
+                placeholder={
+                  configuracionQuery.data?.tieneClaveApiIA ? 'Ya hay una clave guardada — pegá una nueva para reemplazarla' : 'sk-ant-…'
+                }
+                autoComplete="off"
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton size="small" onClick={() => setMostrarClave((v) => !v)} tabIndex={-1}>
+                          {mostrarClave ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+              {configuracionQuery.data?.tieneClaveApiIA && (
+                <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                  <Typography variant="caption" color="success.main">
+                    ✓ Ya hay una clave configurada.
+                  </Typography>
+                  <Button size="small" color="error" onClick={() => setConfirmarQuitarClave(true)}>
+                    Quitar clave
+                  </Button>
+                </Stack>
+              )}
+            </div>
+
+            <Divider sx={{ my: 1 }} />
+
+            <div>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                 Cliente y proveedor por defecto
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -246,14 +328,8 @@ export function ConfiguracionEmpresaPage() {
                 disabled={!nombre.trim() || !moneda.trim() || guardarMutation.isPending}
                 onClick={() =>
                   guardarMutation.mutate({
-                    nombre: nombre.trim(),
-                    moneda: moneda.trim(),
-                    permiteVentaACredito,
-                    permiteCompraACredito,
-                    redondearPreciosEnteros,
-                    permiteCodigoCompartidoEntreArticulos,
-                    idClientePorDefecto: clientePorDefecto?.id ?? null,
-                    idProveedorPorDefecto: proveedorPorDefecto?.id ?? null,
+                    ...datosFormulario(),
+                    claveApiIA: claveApiIA.trim() || undefined,
                   })
                 }
               >
@@ -263,6 +339,16 @@ export function ConfiguracionEmpresaPage() {
           </Stack>
         )}
       </Paper>
+
+      <ConfirmDialog
+        open={confirmarQuitarClave}
+        titulo="Quitar clave de IA"
+        mensaje="Las funciones de IA van a dejar de estar disponibles hasta que se cargue una clave nueva. ¿Seguro?"
+        confirmarLabel="Quitar"
+        confirmando={guardarMutation.isPending}
+        onConfirmar={() => guardarMutation.mutate({ ...datosFormulario(), eliminarClaveApiIA: true })}
+        onCancelar={() => setConfirmarQuitarClave(false)}
+      />
     </Stack>
   )
 }
