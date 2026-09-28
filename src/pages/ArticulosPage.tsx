@@ -1613,10 +1613,9 @@ export function ArticulosPage() {
           {lineasTexto == null ? (
             <Stack spacing={2} sx={{ mt: 1 }}>
               <Typography variant="body2" color="text.secondary">
-                Escribí los productos como se te ocurra, uno por línea o todos juntos — ej.
-                "remera polo azul 4, remera nike rojo talla M 5" en indumentaria, o "tornillo
-                autorroscante acero 50, tornillo galvanizado 30" en otro rubro. La IA los va a
-                separar e identificar cuáles ya tenés cargados.
+                Escribí los productos como se te ocurra, uno por línea o todos juntos, con la
+                cantidad y las características que correspondan (talla, color, material, lote, lo
+                que uses) — la IA los va a separar e identificar cuáles ya tenés cargados.
               </Typography>
               <TextField
                 label="Productos"
