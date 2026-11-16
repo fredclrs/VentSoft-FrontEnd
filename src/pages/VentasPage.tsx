@@ -27,6 +27,7 @@ import BarcodeIcon from '@mui/icons-material/BarcodeReader'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import { EntityAutocomplete } from '../components/EntityAutocomplete'
 import { SelectorVariantes } from '../components/SelectorVariantes'
+import { SelectorModo } from '../components/SelectorModo'
 import { EscanerCamara } from '../components/EscanerCamara'
 import { CampoNumero } from '../components/CampoNumero'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -105,6 +106,9 @@ export function VentasPage() {
   // ver ConfiguracionEmpresa.PermiteCodigoCompartidoEntreArticulos), se elige cuál es acá en vez
   // de agregarlo directo.
   const [variantesParaElegir, setVariantesParaElegir] = useState<Articulo[] | null>(null)
+  // Artículo escaneado que se vende suelto y por paquete con el MISMO código (sin "Código de
+  // la caja"): se pregunta cuál con SelectorModo en vez de adivinar.
+  const [modoParaElegir, setModoParaElegir] = useState<Articulo | null>(null)
   // Lector con la cámara del dispositivo (útil en celular, sin lector físico) — se abre a
   // demanda, no está siempre activo (evita pedir permiso de cámara sin necesitarla).
   const [escanerCamaraAbierto, setEscanerCamaraAbierto] = useState(false)
@@ -393,8 +397,18 @@ export function VentasPage() {
    * stock — el mismo chequeo se use como se llegue a este artículo (match único o elegido del
    * selector de variantes). */
   function agregarSiHayStock(articulo: Articulo, codigoEscaneado: string) {
-    // Suelto o caja según qué código se escaneó (ver modoAlEscanear).
+    // Suelto o caja según qué código se escaneó (ver modoAlEscanear). Si el mismo código sirve
+    // para las dos formas, se pregunta con SelectorModo.
     const modo = modoAlEscanear(articulo, codigoEscaneado)
+    if (modo === null) {
+      setModoParaElegir(articulo)
+      setErrorEscaneo(null)
+      return
+    }
+    agregarEnModoSiHayStock(articulo, modo)
+  }
+
+  function agregarEnModoSiHayStock(articulo: Articulo, modo: ModoVentaCompra) {
     if (!hayStockParaAgregar(articulo, modo)) {
       setErrorEscaneo(
         modo === 'caja' && fraccionDe(articulo) > 1
@@ -413,6 +427,12 @@ export function VentasPage() {
     setVariantesParaElegir(null)
   }
 
+  function elegirModo(modo: ModoVentaCompra) {
+    if (!modoParaElegir) return
+    agregarEnModoSiHayStock(modoParaElegir, modo)
+    setModoParaElegir(null)
+  }
+
   /** Busca el código (de un lector físico, del cuadro de texto, o de la cámara) y agrega el
    * artículo si hay una sola coincidencia, o abre el selector de variantes si hay varias. */
   function procesarCodigo(codigoCrudo: string) {
@@ -420,6 +440,7 @@ export function VentasPage() {
     if (!codigo) return
 
     setVariantesParaElegir(null)
+    setModoParaElegir(null)
     const coincidencias = articulosPorCodigo(articulosQuery.data ?? [], codigo)
     if (coincidencias.length === 0) {
       setErrorEscaneo(`No se encontró ningún artículo con el código "${codigo}".`)
@@ -463,6 +484,22 @@ export function VentasPage() {
         return
       }
       if (e.key !== 'Enter') return
+    }
+
+    // "¿Suelto o por paquete?" abierto: 1 = suelto, 2 = paquete, Enter = suelto (lo más común
+    // en un almacén), Escape = descartar. Nunca deja que Enter registre la venta acá.
+    if (modoParaElegir) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setModoParaElegir(null)
+        return
+      }
+      if (e.key === '1' || e.key === '2' || e.key === 'Enter') {
+        e.preventDefault()
+        elegirModo(e.key === '2' ? 'caja' : 'unidad')
+        return
+      }
+      return
     }
 
     if (e.key !== 'Enter') return
@@ -705,7 +742,7 @@ export function VentasPage() {
             // Envolverlo en un <form> de verdad (en vez de depender solo de onKeyDown) hace que
             // esto funcione en todos los celulares, no solo los que sí mandan bien el Enter.
             e.preventDefault()
-            if (!variantesParaElegir) manejarEnvioEscaneo()
+            if (!variantesParaElegir && !modoParaElegir) manejarEnvioEscaneo()
           }}
         >
           <TextField
@@ -782,7 +819,7 @@ export function VentasPage() {
       {escanerCamaraAbierto && (
         <EscanerCamara
           onCodigo={procesarCodigo}
-          pausado={!!variantesParaElegir}
+          pausado={!!variantesParaElegir || !!modoParaElegir}
           onCerrar={() => setEscanerCamaraAbierto(false)}
         />
       )}
@@ -798,6 +835,32 @@ export function VentasPage() {
           onCerrar={() => setVariantesParaElegir(null)}
         />
       )}
+
+      {modoParaElegir && (() => {
+        const fraccion = fraccionDe(modoParaElegir)
+        const libre = stockLibreUnidades(modoParaElegir)
+        const conStock = Number.isFinite(libre)
+        return (
+          <SelectorModo
+            articulo={modoParaElegir}
+            opciones={[
+              {
+                modo: 'unidad',
+                etiqueta: `Unidad suelta — ${money(precioUnidadSueltaDe(modoParaElegir))}${conStock ? ` · quedan ${libre}` : ''}`,
+                deshabilitada: conStock && libre < 1,
+              },
+              {
+                modo: 'caja',
+                etiqueta: `Paquete x${fraccion} — ${money(modoParaElegir.precio)}${conStock ? ` · quedan ${Math.floor(libre / fraccion)}` : ''}`,
+                deshabilitada: conStock && libre < fraccion,
+              },
+            ]}
+            porDefecto="unidad"
+            onElegir={elegirModo}
+            onCerrar={() => setModoParaElegir(null)}
+          />
+        )
+      })()}
 
       {/* Solo aparece para artículos que se venden por paquete (fracción > 1) — el resto de los
           negocios (ropa, ferretería, etc.) nunca ve este selector. */}

@@ -26,11 +26,14 @@ export function articulosPorCodigo(articulos: Articulo[], codigo: string): Artic
  * - el código de la caja → la caja entera;
  * - el código de la unidad de un artículo que TIENE código de caja aparte → 1 suelta (almacén:
  *   cada paquete de fideos trae su código, y la caja otro);
- * - si no tiene código de caja → por paquete, como siempre (ropa: el código está en el paquete;
- *   para un artículo sin fracción es lo mismo que la unidad). */
-export function modoAlEscanear(articulo: Articulo, codigo: string): ModoVentaCompra {
+ * - artículo sin fracción → la unidad ('caja' = paquete de 1, es lo mismo);
+ * - null: se vende de las dos formas y el mismo código sirve para las dos (ej. papel: solo el
+ *   rollo trae código, el paquete no) — no hay forma de saberlo, la pantalla tiene que
+ *   preguntar (ver SelectorModo). */
+export function modoAlEscanear(articulo: Articulo, codigo: string): ModoVentaCompra | null {
   if (mismoCodigo(articulo.codigoPaquete, codigo)) return 'caja'
-  return articulo.codigoPaquete && fraccionDe(articulo) > 1 ? 'unidad' : 'caja'
+  if (fraccionDe(articulo) <= 1) return 'caja'
+  return articulo.codigoPaquete ? 'unidad' : null
 }
 
 /** Precio de vender una sola unidad suelta (fuera del paquete): lo cargado explícitamente

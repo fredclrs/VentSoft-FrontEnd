@@ -159,6 +159,7 @@ export function ArticulosPage() {
   const [errorMutacion, setErrorMutacion] = useState<string | null>(null)
   // Qué campo del formulario está llenando la cámara del celular (null = cámara cerrada).
   const [camaraPara, setCamaraPara] = useState<'codigo' | 'codigoPaquete' | null>(null)
+  const codigoRef = useRef<HTMLInputElement>(null)
   const descripcionRef = useRef<HTMLInputElement>(null)
   // Alta con lista de texto libre (IA) — mientras dialogListaTextoAbierto es true se muestra el
   // diálogo; arranca pidiendo el texto (lineasTexto null) y pasa a la revisión apenas la IA
@@ -1050,7 +1051,17 @@ export function ArticulosPage() {
         </Table>
       </TableContainer>
 
-      <Dialog open={dialogAbierto} onClose={cerrarDialog} maxWidth="sm" fullWidth fullScreen={isMobile}>
+      <Dialog
+        open={dialogAbierto}
+        onClose={cerrarDialog}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+        // Alta nueva: el cursor arranca en Código, así el lector de códigos (que "escribe" como un
+        // teclado) carga con solo disparar. Se hace al terminar de abrir porque el Dialog se
+        // queda con el foco al abrirse y le gana al autoFocus del campo.
+        slotProps={{ transition: { onEntered: () => !articuloEnEdicion && codigoRef.current?.focus() } }}
+      >
         <DialogTitle>
           {articuloEnEdicion ? 'Editar artículo' : esDuplicado ? 'Duplicar artículo' : 'Nuevo artículo'}
         </DialogTitle>
@@ -1069,9 +1080,7 @@ export function ArticulosPage() {
                 label="Código"
                 required
                 fullWidth
-                // Alta nueva: el cursor ya está acá, así el lector de códigos (que "escribe" como
-                // un teclado) carga el código con solo disparar, sin hacer clic antes.
-                autoFocus={!articuloEnEdicion}
+                inputRef={codigoRef}
                 autoComplete="off"
                 value={form.codigo}
                 onChange={(e) => actualizarCampo('codigo', e.target.value)}
