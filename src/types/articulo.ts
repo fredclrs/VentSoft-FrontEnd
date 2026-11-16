@@ -8,6 +8,10 @@ export interface ArticuloCaracteristica {
 export interface Articulo {
   id: number
   codigo: string
+  /** Código de barras de la CAJA cerrada, distinto del de la unidad (almacén). Si está cargado,
+   * escanear "codigo" vende 1 suelta y escanear este vende la caja — ver modoPorCodigo. Solo
+   * tiene sentido con fraccion > 1. */
+  codigoPaquete?: string | null
   descripcion?: string | null
   tamano: string
   unidadMedida?: string | null

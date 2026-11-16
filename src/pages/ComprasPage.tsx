@@ -36,7 +36,7 @@ import { EscanerCamara } from '../components/EscanerCamara'
 import { ErrorDialog } from '../components/ErrorDialog'
 import { CampoNumero } from '../components/CampoNumero'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
-import { fraccionDe, costoUnidadSueltaDe } from '../utils/fraccion'
+import { articulosPorCodigo, fraccionDe, costoUnidadSueltaDe, modoAlEscanear } from '../utils/fraccion'
 import type { ModoVentaCompra } from '../utils/fraccion'
 import { buscarProveedoresTexto } from '../api/proveedores'
 import { actualizarPrecioArticulo, articulosApi, buscarArticulos, getStockTodos } from '../api/articulos'
@@ -436,10 +436,10 @@ export function ComprasPage() {
     })
   }
 
-  function elegirVariante(articulo: Articulo) {
-    // El código de barras está impreso en el paquete: escanear siempre carga "por paquete"
-    // (que para un artículo sin fracción es lo mismo que cargar la unidad).
-    agregarOIncrementarLinea(articulo, 'caja')
+  function elegirVariante(articulo: Articulo, codigoEscaneado: string = articulo.codigo) {
+    // Suelto o caja según qué código se escaneó (ver modoAlEscanear). Las variantes del
+    // selector comparten el código de la unidad.
+    agregarOIncrementarLinea(articulo, modoAlEscanear(articulo, codigoEscaneado))
     setErrorEscaneo(null)
     setVariantesParaElegir(null)
   }
@@ -451,13 +451,11 @@ export function ComprasPage() {
     if (!codigo) return
 
     setVariantesParaElegir(null)
-    const coincidencias = (articulosQuery.data ?? []).filter(
-      (a) => a.codigo.toLowerCase() === codigo.toLowerCase(),
-    )
+    const coincidencias = articulosPorCodigo(articulosQuery.data ?? [], codigo)
     if (coincidencias.length === 0) {
       setErrorEscaneo(`No se encontró ningún artículo con el código "${codigo}".`)
     } else if (coincidencias.length === 1) {
-      elegirVariante(coincidencias[0])
+      elegirVariante(coincidencias[0], codigo)
     } else {
       // Mismo código, varias variantes (talla/color) — se elige acá en vez de agregar directo.
       setVariantesParaElegir(coincidencias)

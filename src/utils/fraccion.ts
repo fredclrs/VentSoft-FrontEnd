@@ -12,6 +12,27 @@ export function fraccionDe(articulo: Articulo): number {
   return articulo.fraccion > 0 ? articulo.fraccion : 1
 }
 
+function mismoCodigo(a: string | null | undefined, b: string): boolean {
+  return !!a && a.toLowerCase() === b.toLowerCase()
+}
+
+/** Artículos que corresponden a un código escaneado: por su código de unidad o por el de la
+ * caja (codigoPaquete). Puede haber varios solo con código compartido entre variantes. */
+export function articulosPorCodigo(articulos: Articulo[], codigo: string): Articulo[] {
+  return articulos.filter((a) => mismoCodigo(a.codigo, codigo) || mismoCodigo(a.codigoPaquete, codigo))
+}
+
+/** Cómo se carga un artículo al escanear este código:
+ * - el código de la caja → la caja entera;
+ * - el código de la unidad de un artículo que TIENE código de caja aparte → 1 suelta (almacén:
+ *   cada paquete de fideos trae su código, y la caja otro);
+ * - si no tiene código de caja → por paquete, como siempre (ropa: el código está en el paquete;
+ *   para un artículo sin fracción es lo mismo que la unidad). */
+export function modoAlEscanear(articulo: Articulo, codigo: string): ModoVentaCompra {
+  if (mismoCodigo(articulo.codigoPaquete, codigo)) return 'caja'
+  return articulo.codigoPaquete && fraccionDe(articulo) > 1 ? 'unidad' : 'caja'
+}
+
 /** Precio de vender una sola unidad suelta (fuera del paquete): lo cargado explícitamente
  * en el artículo, o si no, el precio del paquete repartido entre sus unidades como referencia. */
 export function precioUnidadSueltaDe(articulo: Articulo): number {

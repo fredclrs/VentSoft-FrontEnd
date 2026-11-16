@@ -60,6 +60,7 @@ const ARTICULOS_QUERY_KEY = ['articulos'] as const
 
 const ARTICULO_VACIO: ArticuloFormValues = {
   codigo: '',
+  codigoPaquete: '',
   descripcion: '',
   tamano: '',
   unidadMedida: '',
@@ -424,6 +425,7 @@ export function ArticulosPage() {
     setEsDuplicado(false)
     setForm({
       codigo: articulo.codigo,
+      codigoPaquete: articulo.codigoPaquete ?? '',
       descripcion: articulo.descripcion ?? '',
       tamano: articulo.tamano,
       unidadMedida: articulo.unidadMedida ?? '',
@@ -564,6 +566,8 @@ export function ArticulosPage() {
         grupoEnEdicion.articulos.map((a) =>
           articulosApi.update(a.id, {
             codigo: formGrupo.codigo,
+            // Se conserva tal cual: "Editar grupo" no lo muestra, y omitirlo lo borraría.
+            codigoPaquete: a.codigoPaquete,
             descripcion: formGrupo.descripcion,
             tamano: a.tamano,
             unidadMedida: a.unidadMedida ?? '',
@@ -1101,7 +1105,12 @@ export function ArticulosPage() {
                 type="number"
                 fullWidth
                 value={form.fraccion}
-                onChange={(e) => actualizarCampo('fraccion', Math.max(1, Number(e.target.value)))}
+                onChange={(e) => {
+                  const fraccion = Math.max(1, Number(e.target.value))
+                  actualizarCampo('fraccion', fraccion)
+                  // Sin paquete no hay "código de la caja" (el campo además se oculta).
+                  if (fraccion <= 1) actualizarCampo('codigoPaquete', '')
+                }}
                 helperText="Dejalo en 1 si no vendés por paquete"
                 slotProps={{ htmlInput: { min: 1 } }}
               />
@@ -1134,7 +1143,14 @@ export function ArticulosPage() {
             </Box>
 
             {form.fraccion > 1 && (
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr' }, gap: 2 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+                <TextField
+                  label="Código de la caja (opcional)"
+                  fullWidth
+                  value={form.codigoPaquete ?? ''}
+                  onChange={(e) => actualizarCampo('codigoPaquete', e.target.value)}
+                  helperText="Si la caja trae su propio código de barras: escanear la unidad vende 1 suelta y escanear la caja vende la caja entera."
+                />
                 <TextField
                   label="Precio por unidad suelta (opcional)"
                   type="number"

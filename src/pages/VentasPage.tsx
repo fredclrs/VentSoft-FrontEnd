@@ -34,7 +34,7 @@ import { ErrorDialog } from '../components/ErrorDialog'
 import { etiquetaArticulo, obtenerUbicacion } from '../utils/articulo'
 import { imprimirNotaVenta } from '../utils/notaVenta'
 import type { FormatoImpresion } from '../utils/notaVenta'
-import { fraccionDe, precioUnidadSueltaDe } from '../utils/fraccion'
+import { articulosPorCodigo, fraccionDe, modoAlEscanear, precioUnidadSueltaDe } from '../utils/fraccion'
 import type { ModoVentaCompra } from '../utils/fraccion'
 import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import { buscarClientesTexto } from '../api/clientes'
@@ -392,19 +392,24 @@ export function VentasPage() {
   /** Agrega el artículo escaneado/elegido a la venta, o muestra el error de siempre si no hay
    * stock — el mismo chequeo se use como se llegue a este artículo (match único o elegido del
    * selector de variantes). */
-  function agregarSiHayStock(articulo: Articulo) {
-    if (!hayStockParaAgregar(articulo, 'caja')) {
-      setErrorEscaneo(`"${articulo.codigo}" no tiene stock disponible.`)
+  function agregarSiHayStock(articulo: Articulo, codigoEscaneado: string) {
+    // Suelto o caja según qué código se escaneó (ver modoAlEscanear).
+    const modo = modoAlEscanear(articulo, codigoEscaneado)
+    if (!hayStockParaAgregar(articulo, modo)) {
+      setErrorEscaneo(
+        modo === 'caja' && fraccionDe(articulo) > 1
+          ? `"${articulo.descripcion ?? articulo.codigo}" no tiene una caja completa en stock.`
+          : `"${articulo.codigo}" no tiene stock disponible.`,
+      )
     } else {
-      // El código de barras está impreso en el paquete: escanear siempre vende "por paquete"
-      // (que para un artículo sin fracción es lo mismo que vender la unidad).
-      agregarOIncrementarLinea(articulo, 'caja')
+      agregarOIncrementarLinea(articulo, modo)
       setErrorEscaneo(null)
     }
   }
 
   function elegirVariante(articulo: Articulo) {
-    agregarSiHayStock(articulo)
+    // Las variantes comparten el código de la unidad (no el de la caja).
+    agregarSiHayStock(articulo, articulo.codigo)
     setVariantesParaElegir(null)
   }
 
@@ -415,13 +420,11 @@ export function VentasPage() {
     if (!codigo) return
 
     setVariantesParaElegir(null)
-    const coincidencias = (articulosQuery.data ?? []).filter(
-      (a) => a.codigo.toLowerCase() === codigo.toLowerCase(),
-    )
+    const coincidencias = articulosPorCodigo(articulosQuery.data ?? [], codigo)
     if (coincidencias.length === 0) {
       setErrorEscaneo(`No se encontró ningún artículo con el código "${codigo}".`)
     } else if (coincidencias.length === 1) {
-      agregarSiHayStock(coincidencias[0])
+      agregarSiHayStock(coincidencias[0], codigo)
     } else {
       // Mismo código, varias variantes (talla/color) — se elige acá en vez de agregar directo.
       setVariantesParaElegir(coincidencias)

@@ -78,13 +78,20 @@ export function StockActualPage() {
       .map((s) => {
         const articulo = articuloPorId.get(s.idArticulo)
         const familia = articulo ? familiaPorId.get(articulo.idFamilia) : undefined
-        return { ...s, idFamilia: articulo?.idFamilia, nombreFamilia: familia?.nombreFamilia, fraccion: articulo ? fraccionDe(articulo) : 1 }
+        return {
+          ...s,
+          idFamilia: articulo?.idFamilia,
+          nombreFamilia: familia?.nombreFamilia,
+          fraccion: articulo ? fraccionDe(articulo) : 1,
+          codigoPaquete: articulo?.codigoPaquete ?? null,
+        }
       })
       .filter((f) => !idFamilia || f.idFamilia === idFamilia)
       .filter(
         (f) =>
           !textoLower ||
           f.codigo.toLowerCase().includes(textoLower) ||
+          (f.codigoPaquete ?? '').toLowerCase().includes(textoLower) ||
           (f.descripcion ?? '').toLowerCase().includes(textoLower),
       )
       .sort((a, b) => a.codigo.localeCompare(b.codigo))
