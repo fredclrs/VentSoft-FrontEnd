@@ -96,10 +96,12 @@ export function UsuariosPage() {
 
   const guardarMutation = useMutation({
     mutationFn: () => {
-      const payload: UsuarioFormValues = {
+      // Teléfono vacío se manda como "sin teléfono" (se omite del JSON): el backend lo
+      // espera como número, y un "" lo rechaza con 400 antes de llegar a validar nada.
+      const payload = {
         ...form,
-        telefono: form.telefono,
-      }
+        telefono: form.telefono.trim() || undefined,
+      } as UsuarioFormValues
       return usuarioEnEdicion ? usuariosApi.update(usuarioEnEdicion.id, payload) : usuariosApi.create(payload)
     },
     onSuccess: () => {
