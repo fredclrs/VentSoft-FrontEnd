@@ -499,6 +499,12 @@ export function VentasPage() {
         elegirModo(e.key === '2' ? 'caja' : 'unidad')
         return
       }
+      // Empezó a escanear otro producto sin contestar: cuenta como Enter (suelto) y la tecla
+      // sigue de largo al cuadro, así el código siguiente entra completo.
+      if (e.key.length === 1) {
+        elegirModo('unidad')
+        return
+      }
       return
     }
 

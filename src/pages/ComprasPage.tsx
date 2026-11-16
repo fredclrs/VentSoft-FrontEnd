@@ -515,6 +515,12 @@ export function ComprasPage() {
         elegirModo(e.key === '1' ? 'unidad' : 'caja')
         return
       }
+      // Empezó a escanear otro producto sin contestar: cuenta como Enter (paquete) y la tecla
+      // sigue de largo al cuadro, así el código siguiente entra completo.
+      if (e.key.length === 1) {
+        elegirModo('caja')
+        return
+      }
       return
     }
 
