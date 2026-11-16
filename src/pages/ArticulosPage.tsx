@@ -135,6 +135,16 @@ function calcularPrecioPorMargen(costo: number, margen: number, redondearEnteros
   return redondearEnteros ? Math.ceil(precio) : Math.round(precio * 100) / 100
 }
 
+/** La cuenta al revés de calcularPrecioPorMargen: qué margen (sobre el precio de venta) da un
+ * precio puesto a mano — 1 - Costo/Precio. A 4 decimales y no 2 a propósito: con 2, al
+ * recalcular el precio en la próxima Compra (precio redondeado al entero de arriba) un $1.300
+ * puede volver como $1.301. Undefined si no hay costo o si el precio no supera al costo (no hay
+ * un margen válido, 0 a <100, que lo exprese). */
+function calcularMargenPorPrecio(costo: number, precio: number): number | undefined {
+  if (costo <= 0 || precio <= costo) return undefined
+  return Math.round((1 - costo / precio) * 1000000) / 10000
+}
+
 export function ArticulosPage() {
   const isMobile = useIsMobile()
   const { money, redondearPreciosEnteros, permiteCodigoCompartidoEntreArticulos, tieneClaveApiIA } =
@@ -1153,13 +1163,23 @@ export function ArticulosPage() {
                 label="Precio de venta"
                 fullWidth
                 value={form.precio}
-                onChange={(precio) => actualizarCampo('precio', precio)}
+                onChange={(precio) => {
+                  actualizarCampo('precio', precio)
+                  // Precio a mano → el margen se recalcula solo (la cuenta inversa). Solo si el
+                  // artículo ya usa margen, o es uno nuevo: un artículo existente con precio 100%
+                  // manual (sin margen, como carga CEA) no pasa a tener margen sin que nadie lo pida.
+                  if (form.margenGanancia != null || !articuloEnEdicion) {
+                    actualizarCampo('margenGanancia', calcularMargenPorPrecio(form.costo, precio))
+                  }
+                }}
                 helperText={
-                  form.margenGanancia != null
-                    ? 'Calculado con el margen — lo podés ajustar (ej. redondearlo a un precio cerrado).'
-                    : form.fraccion > 1
-                      ? 'Precio del paquete completo'
-                      : undefined
+                  form.costo > 0 && form.precio > 0 && form.precio <= form.costo
+                    ? 'Ojo: el precio no supera al costo.'
+                    : form.margenGanancia != null
+                      ? 'Si lo cambiás, el margen % se recalcula solo.'
+                      : form.fraccion > 1
+                        ? 'Precio del paquete completo'
+                        : undefined
                 }
               />
               <CampoNumero
@@ -1170,6 +1190,9 @@ export function ArticulosPage() {
                   actualizarCampo('costo', nuevoCosto)
                   if (form.margenGanancia != null) {
                     actualizarCampo('precio', calcularPrecioPorMargen(nuevoCosto, form.margenGanancia, redondearPreciosEnteros))
+                  } else if (!articuloEnEdicion && form.precio > 0) {
+                    // Artículo nuevo con el precio cargado antes que el costo: completa el margen.
+                    actualizarCampo('margenGanancia', calcularMargenPorPrecio(nuevoCosto, form.precio))
                   }
                 }}
               />
