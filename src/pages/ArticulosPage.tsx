@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
@@ -32,6 +32,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import BarcodeIcon from '@mui/icons-material/BarcodeReader'
+import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined'
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
@@ -44,6 +45,7 @@ import { getErrorMessage } from '../api/errors'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ErrorDialog } from '../components/ErrorDialog'
 import { CampoNumero } from '../components/CampoNumero'
+import { EscanerCamara } from '../components/EscanerCamara'
 import { imprimirEtiquetaArticulo } from '../utils/barcode'
 import { agregarEtiquetaPendiente } from '../api/etiquetasPendientes'
 import { interpretarListaProductos } from '../api/ia'
@@ -145,6 +147,9 @@ export function ArticulosPage() {
   const [esDuplicado, setEsDuplicado] = useState(false)
   const [form, setForm] = useState<ArticuloFormValues>(ARTICULO_VACIO)
   const [errorMutacion, setErrorMutacion] = useState<string | null>(null)
+  // Qué campo del formulario está llenando la cámara del celular (null = cámara cerrada).
+  const [camaraPara, setCamaraPara] = useState<'codigo' | 'codigoPaquete' | null>(null)
+  const descripcionRef = useRef<HTMLInputElement>(null)
   // Alta con lista de texto libre (IA) — mientras dialogListaTextoAbierto es true se muestra el
   // diálogo; arranca pidiendo el texto (lineasTexto null) y pasa a la revisión apenas la IA
   // contesta. Ver ConfiguracionEmpresa.tieneClaveApiIA para por qué el botón puede no estar visible.
@@ -474,6 +479,53 @@ export function ArticulosPage() {
 
   function cerrarDialog() {
     setDialogAbierto(false)
+    setCamaraPara(null)
+  }
+
+  /** Otro artículo que ya usa este código (como código de unidad o de caja), para avisar en el
+   * momento de escanearlo en vez de recién al guardar. */
+  function articuloQueUsaCodigo(codigo: string | null | undefined): Articulo | undefined {
+    const buscado = codigo?.trim().toLowerCase()
+    if (!buscado) return undefined
+    return (articulosQuery.data ?? []).find(
+      (a) =>
+        a.id !== articuloEnEdicion?.id &&
+        (a.codigo.toLowerCase() === buscado || a.codigoPaquete?.toLowerCase() === buscado),
+    )
+  }
+
+  function avisoCodigoRepetido(codigo: string | null | undefined, esCodigoDeUnidad: boolean): string | undefined {
+    const otro = articuloQueUsaCodigo(codigo)
+    if (!otro) return undefined
+    // Con código compartido, repetir el código de unidad es justamente cargar otra variante.
+    const esVariante =
+      esCodigoDeUnidad && permiteCodigoCompartidoEntreArticulos && otro.codigo.toLowerCase() === codigo!.trim().toLowerCase()
+    if (esVariante) return undefined
+    return `Ya está cargado en: ${otro.descripcion || otro.codigo}${otro.tamano ? ` (${otro.tamano})` : ''}`
+  }
+
+  /** La cámara lee un solo código: lo pone en el campo, se cierra, y si era el código de la
+   * unidad deja el cursor en Descripción para seguir cargando sin tocar nada más. */
+  function recibirCodigoDeCamara(codigo: string) {
+    if (!camaraPara) return
+    actualizarCampo(camaraPara, codigo)
+    if (camaraPara === 'codigo') setTimeout(() => descripcionRef.current?.focus(), 50)
+    setCamaraPara(null)
+  }
+
+  function botonCamara(campo: 'codigo' | 'codigoPaquete') {
+    return (
+      <InputAdornment position="end">
+        <IconButton
+          size="small"
+          title={camaraPara === campo ? 'Cerrar cámara' : 'Escanear con la cámara'}
+          color={camaraPara === campo ? 'primary' : 'default'}
+          onClick={() => setCamaraPara((actual) => (actual === campo ? null : campo))}
+        >
+          <CameraAltIcon fontSize="small" />
+        </IconButton>
+      </InputAdornment>
+    )
   }
 
   function actualizarCampo<K extends keyof ArticuloFormValues>(campo: K, valor: ArticuloFormValues[K]) {
@@ -1007,16 +1059,37 @@ export function ArticulosPage() {
                 label="Código"
                 required
                 fullWidth
+                // Alta nueva: el cursor ya está acá, así el lector de códigos (que "escribe" como
+                // un teclado) carga el código con solo disparar, sin hacer clic antes.
+                autoFocus={!articuloEnEdicion}
+                autoComplete="off"
                 value={form.codigo}
                 onChange={(e) => actualizarCampo('codigo', e.target.value)}
+                onKeyDown={(e) => {
+                  // El lector manda Enter al final del código: pasa directo a Descripción.
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    descripcionRef.current?.focus()
+                  }
+                }}
+                helperText={avisoCodigoRepetido(form.codigo, true)}
+                slotProps={{
+                  input: { endAdornment: botonCamara('codigo') },
+                  formHelperText: { sx: { color: 'warning.main' } },
+                }}
               />
               <TextField
                 label="Descripción"
                 fullWidth
+                inputRef={descripcionRef}
                 value={form.descripcion ?? ''}
                 onChange={(e) => actualizarCampo('descripcion', e.target.value)}
               />
             </Box>
+
+            {camaraPara === 'codigo' && (
+              <EscanerCamara onCodigo={recibirCodigoDeCamara} onCerrar={() => setCamaraPara(null)} />
+            )}
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
               <TextField
@@ -1147,9 +1220,19 @@ export function ArticulosPage() {
                 <TextField
                   label="Código de la caja (opcional)"
                   fullWidth
+                  autoComplete="off"
                   value={form.codigoPaquete ?? ''}
                   onChange={(e) => actualizarCampo('codigoPaquete', e.target.value)}
-                  helperText="Si la caja trae su propio código de barras: escanear la unidad vende 1 suelta y escanear la caja vende la caja entera."
+                  // El Enter del lector no tiene que hacer nada acá.
+                  onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                  helperText={
+                    avisoCodigoRepetido(form.codigoPaquete, false) ??
+                    'Si la caja trae su propio código de barras: escanear la unidad vende 1 suelta y escanear la caja vende la caja entera.'
+                  }
+                  slotProps={{
+                    input: { endAdornment: botonCamara('codigoPaquete') },
+                    formHelperText: avisoCodigoRepetido(form.codigoPaquete, false) ? { sx: { color: 'warning.main' } } : undefined,
+                  }}
                 />
                 <TextField
                   label="Precio por unidad suelta (opcional)"
@@ -1160,6 +1243,10 @@ export function ArticulosPage() {
                   helperText={`Si vendés una sola unidad suelta del paquete. Vacío = se usa ${money(form.precio / form.fraccion)} (proporcional).`}
                 />
               </Box>
+            )}
+
+            {camaraPara === 'codigoPaquete' && form.fraccion > 1 && (
+              <EscanerCamara onCodigo={recibirCodigoDeCamara} onCerrar={() => setCamaraPara(null)} />
             )}
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
