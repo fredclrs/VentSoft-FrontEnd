@@ -46,6 +46,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ErrorDialog } from '../components/ErrorDialog'
 import { CampoNumero } from '../components/CampoNumero'
 import { EscanerCamara } from '../components/EscanerCamara'
+import { usePaginacion } from '../components/Paginacion'
 import { imprimirEtiquetaArticulo } from '../utils/barcode'
 import { agregarEtiquetaPendiente } from '../api/etiquetasPendientes'
 import { interpretarListaProductos } from '../api/ia'
@@ -253,6 +254,7 @@ export function ArticulosPage() {
     }
     return Array.from(mapa.values())
   }, [filtrados, permiteCodigoCompartidoEntreArticulos])
+  const { visibles: gruposVisibles, paginador } = usePaginacion(grupos, busqueda.trim())
 
   function alternarGrupo(clave: string) {
     setGruposExpandidos((prev) => ({ ...prev, [clave]: !(prev[clave] ?? !!busqueda.trim()) }))
@@ -907,7 +909,7 @@ export function ArticulosPage() {
               </TableRow>
             )}
 
-            {grupos.map((grupo) => {
+            {gruposVisibles.map((grupo) => {
               // Grupo de una sola variante: se ve exactamente como una fila suelta de siempre
               // (no hay nada que desplegar), pero si el negocio comparte código entre artículos
               // igual ofrecemos "+ Variante" para poder sumarle otra talla/color más adelante.
@@ -1049,6 +1051,7 @@ export function ArticulosPage() {
             })}
           </TableBody>
         </Table>
+        {paginador}
       </TableContainer>
 
       <Dialog

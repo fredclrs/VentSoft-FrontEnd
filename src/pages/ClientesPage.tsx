@@ -28,6 +28,7 @@ import { actualizarCliente, buscarClientes, crearCliente, eliminarCliente } from
 import { leerDocumentoCliente } from '../api/ia'
 import { getErrorMessage } from '../api/errors'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { usePaginacion } from '../components/Paginacion'
 import { ErrorDialog } from '../components/ErrorDialog'
 import { CapturarFoto } from '../components/CapturarFoto'
 import { stickyActionsSx } from '../utils/tableStyles'
@@ -80,6 +81,7 @@ export function ClientesPage() {
         c.documentoIdentidad.toLowerCase().includes(texto),
     )
   }, [clientesQuery.data, busqueda])
+  const { visibles: clientesVisibles, paginador } = usePaginacion(clientesFiltrados, busqueda.trim())
 
   const guardarMutation = useMutation({
     mutationFn: () =>
@@ -216,7 +218,7 @@ export function ClientesPage() {
               </TableRow>
             )}
 
-            {clientesFiltrados.map((cliente) => (
+            {clientesVisibles.map((cliente) => (
               <TableRow key={cliente.id} hover>
                 <TableCell>{cliente.nombre}</TableCell>
                 <TableCell>{cliente.documentoIdentidad}</TableCell>
@@ -243,6 +245,7 @@ export function ClientesPage() {
             ))}
           </TableBody>
         </Table>
+        {paginador}
       </TableContainer>
 
       <Dialog open={dialogAbierto} onClose={cerrarDialog} maxWidth="sm" fullWidth fullScreen={isMobile}>

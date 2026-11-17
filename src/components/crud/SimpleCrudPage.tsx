@@ -30,6 +30,7 @@ import { getErrorMessage } from '../../api/errors'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { stickyActionsSx } from '../../utils/tableStyles'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { usePaginacion } from '../Paginacion'
 import type { CrudApi } from '../../api/crud'
 
 /** Estado del formulario del diálogo: todo como string (así son los inputs controlados). */
@@ -112,6 +113,7 @@ export function SimpleCrudPage<TDto extends { id: number }, TForm>({
     if (!texto) return data
     return data.filter((item) => matchesSearch(item, texto))
   }, [query.data, busqueda, matchesSearch])
+  const { visibles, paginador } = usePaginacion(filtrados, busqueda.trim())
 
   const guardarMutation = useMutation({
     mutationFn: () => {
@@ -222,7 +224,7 @@ export function SimpleCrudPage<TDto extends { id: number }, TForm>({
               </TableRow>
             )}
 
-            {filtrados.map((item) => (
+            {visibles.map((item) => (
               <TableRow key={item.id} hover>
                 {columns.map((c) => (
                   <TableCell key={c.key}>{c.render ? c.render(item) : formatCell(item[c.key])}</TableCell>
@@ -247,6 +249,7 @@ export function SimpleCrudPage<TDto extends { id: number }, TForm>({
             ))}
           </TableBody>
         </Table>
+        {paginador}
       </TableContainer>
 
       <Dialog open={dialogAbierto} onClose={cerrarDialog} maxWidth="sm" fullWidth fullScreen={isMobile}>

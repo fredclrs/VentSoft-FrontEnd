@@ -29,6 +29,7 @@ import { imprimirListado } from '../../utils/imprimirListado'
 import { useConfiguracionEmpresa } from '../../hooks/useConfiguracionEmpresa'
 import { fraccionDe } from '../../utils/fraccion'
 import { EscanerCamara } from '../../components/EscanerCamara'
+import { usePaginacion } from '../../components/Paginacion'
 
 export function StockActualPage() {
   const { nombreNegocio } = useConfiguracionEmpresa()
@@ -96,6 +97,8 @@ export function StockActualPage() {
       )
       .sort((a, b) => a.codigo.localeCompare(b.codigo))
   }, [stockQuery.data, articuloPorId, familiaPorId, texto, idFamilia])
+  // Solo se pagina lo que se ve: Imprimir sigue sacando la lista completa (filas).
+  const { visibles: filasVisibles, paginador } = usePaginacion(filas, `${texto.trim()}|${idFamilia}`)
 
   const cargando = stockQuery.isLoading || articulosQuery.isLoading || familiasQuery.isLoading
   const hayError = stockQuery.isError || articulosQuery.isError || familiasQuery.isError
@@ -249,7 +252,7 @@ export function StockActualPage() {
                 </TableCell>
               </TableRow>
             )}
-            {filas.map((f) => {
+            {filasVisibles.map((f) => {
               const stockBajo = f.stockMinimo != null && f.stockActual <= f.stockMinimo
               // Solo se muestra el desglose paquete/suelto en artículos que de verdad se venden
               // por paquete (fraccion > 1) — el resto de los negocios nunca ve esta cuenta.
@@ -282,6 +285,7 @@ export function StockActualPage() {
             })}
           </TableBody>
         </Table>
+        {paginador}
       </TableContainer>
     </Stack>
   )
