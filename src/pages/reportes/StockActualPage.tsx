@@ -30,6 +30,7 @@ import { useConfiguracionEmpresa } from '../../hooks/useConfiguracionEmpresa'
 import { fraccionDe } from '../../utils/fraccion'
 import { EscanerCamara } from '../../components/EscanerCamara'
 import { usePaginacion } from '../../components/Paginacion'
+import { useOrden } from '../../components/Orden'
 
 export function StockActualPage() {
   const { nombreNegocio } = useConfiguracionEmpresa()
@@ -95,10 +96,20 @@ export function StockActualPage() {
           (f.codigoPaquete ?? '').toLowerCase().includes(textoLower) ||
           (f.descripcion ?? '').toLowerCase().includes(textoLower),
       )
-      .sort((a, b) => a.codigo.localeCompare(b.codigo))
   }, [stockQuery.data, articuloPorId, familiaPorId, texto, idFamilia])
-  // Solo se pagina lo que se ve: Imprimir sigue sacando la lista completa (filas).
-  const { visibles: filasVisibles, paginador } = usePaginacion(filas, `${texto.trim()}|${idFamilia}`)
+  // A→Z por descripción de entrada; tocando "Stock actual" se ven primero los que tienen menos.
+  const { ordenados: filasOrdenadas, encabezado, ordenClave } = useOrden(
+    filas,
+    {
+      codigo: (f) => f.codigo,
+      descripcion: (f) => f.descripcion,
+      familia: (f) => f.nombreFamilia,
+      stock: (f) => f.stockActual,
+    },
+    { clave: 'descripcion', sentido: 'asc' },
+  )
+  // Solo se pagina lo que se ve: Imprimir sigue sacando la lista completa, en el mismo orden.
+  const { visibles: filasVisibles, paginador } = usePaginacion(filasOrdenadas, `${texto.trim()}|${idFamilia}|${ordenClave}`)
 
   const cargando = stockQuery.isLoading || articulosQuery.isLoading || familiasQuery.isLoading
   const hayError = stockQuery.isError || articulosQuery.isError || familiasQuery.isError
@@ -116,7 +127,7 @@ export function StockActualPage() {
         { label: 'Mínimo', align: 'right' },
         { label: 'Ideal', align: 'right' },
       ],
-      filas: filas.map((f) => [
+      filas: filasOrdenadas.map((f) => [
         f.codigo,
         f.descripcion || '—',
         f.nombreFamilia ?? '—',
@@ -229,10 +240,10 @@ export function StockActualPage() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Código</TableCell>
-              <TableCell>Descripción</TableCell>
-              <TableCell>Familia</TableCell>
-              <TableCell align="right">Stock actual</TableCell>
+              {encabezado('codigo', 'Código')}
+              {encabezado('descripcion', 'Descripción')}
+              {encabezado('familia', 'Familia')}
+              {encabezado('stock', 'Stock actual', { align: 'right' })}
               <TableCell align="right">Mínimo</TableCell>
               <TableCell align="right">Ideal</TableCell>
             </TableRow>

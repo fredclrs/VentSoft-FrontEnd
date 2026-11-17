@@ -47,6 +47,7 @@ import { ErrorDialog } from '../components/ErrorDialog'
 import { CampoNumero } from '../components/CampoNumero'
 import { EscanerCamara } from '../components/EscanerCamara'
 import { usePaginacion } from '../components/Paginacion'
+import { useOrden } from '../components/Orden'
 import { imprimirEtiquetaArticulo } from '../utils/barcode'
 import { agregarEtiquetaPendiente } from '../api/etiquetasPendientes'
 import { interpretarListaProductos } from '../api/ia'
@@ -254,7 +255,19 @@ export function ArticulosPage() {
     }
     return Array.from(mapa.values())
   }, [filtrados, permiteCodigoCompartidoEntreArticulos])
-  const { visibles: gruposVisibles, paginador } = usePaginacion(grupos, busqueda.trim())
+  // A→Z por descripción de entrada; tocando el título de una columna se ordena por esa.
+  const { ordenados: gruposOrdenados, encabezado, ordenClave } = useOrden(
+    grupos,
+    {
+      codigo: (g) => g.codigo,
+      descripcion: (g) => g.descripcion,
+      familia: (g) => familiaPorId.get(g.idFamilia),
+      precio: (g) => g.articulos[0].precio,
+      costo: (g) => g.articulos[0].costo,
+    },
+    { clave: 'descripcion', sentido: 'asc' },
+  )
+  const { visibles: gruposVisibles, paginador } = usePaginacion(gruposOrdenados, `${busqueda.trim()}|${ordenClave}`)
 
   function alternarGrupo(clave: string) {
     setGruposExpandidos((prev) => ({ ...prev, [clave]: !(prev[clave] ?? !!busqueda.trim()) }))
@@ -880,12 +893,12 @@ export function ArticulosPage() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Código</TableCell>
-              <TableCell>Descripción</TableCell>
-              <TableCell>Familia</TableCell>
+              {encabezado('codigo', 'Código')}
+              {encabezado('descripcion', 'Descripción')}
+              {encabezado('familia', 'Familia')}
               <TableCell>Ubicación</TableCell>
-              <TableCell align="right">Precio</TableCell>
-              <TableCell align="right">Costo</TableCell>
+              {encabezado('precio', 'Precio', { align: 'right', primeroDesc: true })}
+              {encabezado('costo', 'Costo', { align: 'right', primeroDesc: true })}
               <TableCell>{permiteCodigoCompartidoEntreArticulos ? 'Variante' : 'Estado'}</TableCell>
               <TableCell align="right" sx={stickyActionsSx}>
                 Acciones

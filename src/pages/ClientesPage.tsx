@@ -29,6 +29,7 @@ import { leerDocumentoCliente } from '../api/ia'
 import { getErrorMessage } from '../api/errors'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { usePaginacion } from '../components/Paginacion'
+import { useOrden } from '../components/Orden'
 import { ErrorDialog } from '../components/ErrorDialog'
 import { CapturarFoto } from '../components/CapturarFoto'
 import { stickyActionsSx } from '../utils/tableStyles'
@@ -81,7 +82,16 @@ export function ClientesPage() {
         c.documentoIdentidad.toLowerCase().includes(texto),
     )
   }, [clientesQuery.data, busqueda])
-  const { visibles: clientesVisibles, paginador } = usePaginacion(clientesFiltrados, busqueda.trim())
+  const { ordenados: clientesOrdenados, encabezado, ordenClave } = useOrden(
+    clientesFiltrados,
+    {
+      nombre: (c) => c.nombre,
+      documento: (c) => c.documentoIdentidad,
+      zona: (c) => c.zona,
+    },
+    { clave: 'nombre', sentido: 'asc' },
+  )
+  const { visibles: clientesVisibles, paginador } = usePaginacion(clientesOrdenados, `${busqueda.trim()}|${ordenClave}`)
 
   const guardarMutation = useMutation({
     mutationFn: () =>
@@ -191,9 +201,9 @@ export function ClientesPage() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Nombre</TableCell>
-              <TableCell>Documento</TableCell>
-              <TableCell>Zona</TableCell>
+              {encabezado('nombre', 'Nombre')}
+              {encabezado('documento', 'Documento')}
+              {encabezado('zona', 'Zona')}
               <TableCell>Teléfono</TableCell>
               <TableCell>Correo</TableCell>
               <TableCell align="right" sx={stickyActionsSx}>
