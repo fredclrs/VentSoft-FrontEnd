@@ -974,6 +974,10 @@ export function VentasPage() {
                       size="small"
                       value={linea.cantidad}
                       valorVacio={1}
+                      reflejarCorreccion
+                      helperText={
+                        stockQuery.data && linea.cantidad >= maxParaEsteRenglon ? `Máx. ${maxParaEsteRenglon}` : undefined
+                      }
                       onChange={(valor) => {
                         // Nunca por encima del stock del artículo (convertido a la unidad de
                         // este renglón: paquetes o sueltas) — igual que antes, ahora en unidades reales.

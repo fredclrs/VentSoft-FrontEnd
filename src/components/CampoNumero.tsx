@@ -8,6 +8,12 @@ interface CampoNumeroProps extends Omit<TextFieldProps, 'value' | 'onChange' | '
   /** Valor a usar si el campo queda vacío al salir (blur). Por defecto 0 — pasar 1 en campos
    * que nunca pueden ser 0 (ej. Cantidad). */
   valorVacio?: number
+  /** Para cuando quien lo usa CORRIGE lo tipeado en su onChange (ej. Cantidad de Ventas topeada
+   * al stock: escribís 50, hay 10, guarda 10): muestra la corrección al toque, en vez de seguir
+   * mostrando "50" mientras por dentro vale 10. Solo para campos cuyo onChange siempre
+   * actualiza value — si value se actualiza recién después (ej. al salir del campo), esto no
+   * dejaría escribir. */
+  reflejarCorreccion?: boolean
 }
 
 /**
@@ -18,7 +24,15 @@ interface CampoNumeroProps extends Omit<TextFieldProps, 'value' | 'onChange' | '
  * recién al salir (blur) si quedó vacío se vuelve a 0 — así no queda un valor "vacío" guardado
  * por error, pero tampoco se traba mientras se escribe.
  */
-export function CampoNumero({ value, onChange, onFocus, onBlur, valorVacio = 0, ...props }: CampoNumeroProps) {
+export function CampoNumero({
+  value,
+  onChange,
+  onFocus,
+  onBlur,
+  valorVacio = 0,
+  reflejarCorreccion = false,
+  ...props
+}: CampoNumeroProps) {
   const [texto, setTexto] = useState(() => String(value))
   const enfocado = useRef(false)
 
@@ -28,6 +42,14 @@ export function CampoNumero({ value, onChange, onFocus, onBlur, valorVacio = 0, 
   useEffect(() => {
     if (!enfocado.current) setTexto(String(value))
   }, [value])
+
+  // Ver reflejarCorreccion. No toca lo que está a medio escribir y ya vale lo mismo (ej. "8."
+  // mientras se escribe "8.5", o "0.50").
+  useEffect(() => {
+    if (!reflejarCorreccion || !enfocado.current || texto === '') return
+    const tipeado = Number(texto)
+    if (!Number.isNaN(tipeado) && tipeado !== value) setTexto(String(value))
+  }, [reflejarCorreccion, texto, value])
 
   return (
     <TextField
@@ -47,7 +69,7 @@ export function CampoNumero({ value, onChange, onFocus, onBlur, valorVacio = 0, 
           setTexto(String(valorVacio))
           onChange(valorVacio)
         } else {
-          setTexto(String(Number(e.target.value)))
+          setTexto(String(reflejarCorreccion ? value : Number(e.target.value)))
         }
         onBlur?.(e)
       }}
