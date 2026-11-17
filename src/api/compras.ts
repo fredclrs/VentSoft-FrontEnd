@@ -14,6 +14,22 @@ export async function getCompraById(id: number): Promise<Compra> {
   return unwrap(data)
 }
 
+/** Carga o corrige el lote / vencimiento de un renglón de una compra ya registrada (no toca
+ * cantidades, costos, stock ni pagos). fechaVencimiento en formato "AAAA-MM-DD"; null o vacío
+ * deja el campo en blanco. */
+export async function actualizarLoteDetalleCompra(
+  idDetalleCompra: number,
+  lote: string | null,
+  fechaVencimiento: string | null,
+): Promise<void> {
+  const { data } = await apiClient.put<BaseResponse<unknown>>('/Compra/detalle/lote', {
+    idDetalleCompra,
+    lote: lote || null,
+    fechaVencimiento: fechaVencimiento || null,
+  })
+  unwrap(data)
+}
+
 export async function getComprasByProveedor(idProveedor: number): Promise<Compra[]> {
   const { data } = await apiClient.get<BaseResponse<Compra[]>>('/Compra/byProveedor', {
     params: { idProveedor },

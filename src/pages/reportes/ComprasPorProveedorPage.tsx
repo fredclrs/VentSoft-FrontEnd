@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
 import AccordionSummary from '@mui/material/AccordionSummary'
@@ -8,6 +8,10 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
@@ -17,18 +21,20 @@ import TableCell from '@mui/material/TableCell'
 import TableContainer from '@mui/material/TableContainer'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
+import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import FilterAltOffIcon from '@mui/icons-material/FilterAltOffOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMoreOutlined'
 import PrintIcon from '@mui/icons-material/PrintOutlined'
+import EditIcon from '@mui/icons-material/EditOutlined'
 import { EntityAutocomplete } from '../../components/EntityAutocomplete'
 import { FiltroFechaNumero } from '../../components/reportes/FiltroFechaNumero'
 import { buscarProveedoresTexto } from '../../api/proveedores'
 import { articulosApi } from '../../api/articulos'
 import { usuariosApi } from '../../api/usuarios'
 import { temporadasApi } from '../../api/temporadas'
-import { getComprasByProveedor } from '../../api/compras'
+import { actualizarLoteDetalleCompra, getComprasByProveedor } from '../../api/compras'
 import { getErrorMessage } from '../../api/errors'
 import { filtrarPorFechaYNumero, filtrosAnioActual } from '../../utils/filtrarHistorial'
 import { imprimirNotaCompra } from '../../utils/notaCompra'
@@ -36,6 +42,14 @@ import { imprimirExtracto } from '../../utils/imprimirListado'
 import { useConfiguracionEmpresa } from '../../hooks/useConfiguracionEmpresa'
 import type { Proveedor } from '../../types/proveedor'
 import type { Compra } from '../../types/compra'
+
+/** "2026-12-01T00:00:00" -> "01/12/2026" (sin pasar por Date, así la zona horaria no corre
+ * el día). */
+function fechaCorta(fecha: string | null | undefined): string {
+  if (!fecha) return '—'
+  const [anio, mes, dia] = fecha.slice(0, 10).split('-')
+  return `${dia}/${mes}/${anio}`
+}
 
 export function ComprasPorProveedorPage() {
   const { nombreNegocio, simboloMoneda, money } = useConfiguracionEmpresa()
@@ -75,6 +89,26 @@ export function ComprasPorProveedorPage() {
     () => new Map((usuariosQuery.data ?? []).map((u) => [u.id, u])),
     [usuariosQuery.data],
   )
+
+  // Cargar/corregir vencimiento de un renglón ya comprado (ej. no lo pusieron al comprar).
+  const queryClient = useQueryClient()
+  const [vencimientoEnEdicion, setVencimientoEnEdicion] = useState<{
+    idDetalle: number
+    articulo: string
+    lote: string
+    fecha: string
+  } | null>(null)
+  const [errorVencimiento, setErrorVencimiento] = useState<string | null>(null)
+  const guardarVencimientoMutation = useMutation({
+    mutationFn: () =>
+      actualizarLoteDetalleCompra(vencimientoEnEdicion!.idDetalle, vencimientoEnEdicion!.lote.trim(), vencimientoEnEdicion!.fecha),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['compras', 'byProveedor'] })
+      queryClient.invalidateQueries({ queryKey: ['reportes', 'lotesPorVencer'] })
+      setVencimientoEnEdicion(null)
+    },
+    onError: (err) => setErrorVencimiento(getErrorMessage(err)),
+  })
 
   function imprimirNota(compra: Compra) {
     imprimirNotaCompra({
@@ -292,21 +326,48 @@ export function ComprasPorProveedorPage() {
                         <TableRow>
                           <TableCell>Artículo</TableCell>
                           <TableCell>Lote</TableCell>
+                          <TableCell>Vence</TableCell>
                           <TableCell align="right">Cant.</TableCell>
                           <TableCell align="right">C. unit.</TableCell>
                           <TableCell align="right">Subtotal</TableCell>
+                          <TableCell />
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {compra.detalles.map((d) => (
-                          <TableRow key={d.id}>
-                            <TableCell>{articuloPorId.get(d.idArticulo)?.codigo ?? `#${d.idArticulo}`}</TableCell>
-                            <TableCell>{d.lote || '—'}</TableCell>
-                            <TableCell align="right">{d.cantidad}</TableCell>
-                            <TableCell align="right">{money(d.costoUnitario)}</TableCell>
-                            <TableCell align="right">{money(d.subTotal)}</TableCell>
-                          </TableRow>
-                        ))}
+                        {compra.detalles.map((d) => {
+                          const articulo = articuloPorId.get(d.idArticulo)
+                          return (
+                            <TableRow key={d.id}>
+                              <TableCell>
+                                {articulo?.codigo ?? `#${d.idArticulo}`}
+                                {articulo?.descripcion ? ` — ${articulo.descripcion}` : ''}
+                              </TableCell>
+                              <TableCell>{d.lote || '—'}</TableCell>
+                              <TableCell>{fechaCorta(d.fechaVencimiento)}</TableCell>
+                              <TableCell align="right">{d.cantidad}</TableCell>
+                              <TableCell align="right">{money(d.costoUnitario)}</TableCell>
+                              <TableCell align="right">{money(d.subTotal)}</TableCell>
+                              <TableCell align="right" sx={{ width: 48 }}>
+                                <Tooltip title="Cargar o corregir vencimiento / lote">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      setErrorVencimiento(null)
+                                      setVencimientoEnEdicion({
+                                        idDetalle: d.id,
+                                        articulo: articulo?.descripcion || articulo?.codigo || `#${d.idArticulo}`,
+                                        lote: d.lote ?? '',
+                                        fecha: d.fechaVencimiento ? d.fechaVencimiento.slice(0, 10) : '',
+                                      })
+                                    }}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
                       </TableBody>
                     </Table>
                   </TableContainer>
@@ -339,6 +400,44 @@ export function ComprasPorProveedorPage() {
           ))}
         </>
       )}
+
+      <Dialog open={!!vencimientoEnEdicion} onClose={() => setVencimientoEnEdicion(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Vencimiento — {vencimientoEnEdicion?.articulo}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {errorVencimiento && <Alert severity="error">{errorVencimiento}</Alert>}
+            <TextField
+              label="Fecha de vencimiento"
+              type="date"
+              autoFocus
+              value={vencimientoEnEdicion?.fecha ?? ''}
+              onChange={(e) => setVencimientoEnEdicion((v) => (v ? { ...v, fecha: e.target.value } : v))}
+              slotProps={{ inputLabel: { shrink: true } }}
+              helperText="Dejala vacía si este producto no vence."
+            />
+            <TextField
+              label="Lote (opcional)"
+              value={vencimientoEnEdicion?.lote ?? ''}
+              onChange={(e) => setVencimientoEnEdicion((v) => (v ? { ...v, lote: e.target.value } : v))}
+              slotProps={{ htmlInput: { maxLength: 30 } }}
+              helperText="El número de lote que trae impreso el envase. Si no lo usan, dejalo vacío."
+            />
+            <Typography variant="body2" color="text.secondary">
+              Solo cambia el lote y el vencimiento: la cantidad, el costo y el stock de la compra no se tocan.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setVencimientoEnEdicion(null)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            disabled={guardarVencimientoMutation.isPending}
+            onClick={() => guardarVencimientoMutation.mutate()}
+          >
+            Guardar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   )
 }
