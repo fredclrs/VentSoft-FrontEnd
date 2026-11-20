@@ -34,7 +34,10 @@ import { buscarProveedoresTexto } from '../../api/proveedores'
 import { articulosApi } from '../../api/articulos'
 import { usuariosApi } from '../../api/usuarios'
 import { temporadasApi } from '../../api/temporadas'
-import { actualizarLoteDetalleCompra, getComprasByProveedor } from '../../api/compras'
+import { actualizarLoteDetalleCompra, anularCompra, getComprasByProveedor } from '../../api/compras'
+import { AnularDialog } from '../../components/AnularDialog'
+import { useAuth } from '../../auth/AuthContext'
+import { PERMISO_ANULAR } from '../../types/permisos'
 import { getErrorMessage } from '../../api/errors'
 import { filtrarPorFechaYNumero, filtrosAnioActual } from '../../utils/filtrarHistorial'
 import { imprimirNotaCompra } from '../../utils/notaCompra'
@@ -110,6 +113,20 @@ export function ComprasPorProveedorPage() {
     onError: (err) => setErrorVencimiento(getErrorMessage(err)),
   })
 
+  const { tienePermiso } = useAuth()
+  const [compraAAnular, setCompraAAnular] = useState<Compra | null>(null)
+  const [errorAnular, setErrorAnular] = useState<string | null>(null)
+  const anularMutation = useMutation({
+    mutationFn: ({ id, motivo }: { id: number; motivo: string }) => anularCompra(id, motivo),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['compras'] })
+      queryClient.invalidateQueries({ queryKey: ['stock'] })
+      queryClient.invalidateQueries({ queryKey: ['reportes'] })
+      setCompraAAnular(null)
+    },
+    onError: (err) => setErrorAnular(getErrorMessage(err)),
+  })
+
   function imprimirNota(compra: Compra) {
     imprimirNotaCompra({
       nombreNegocio,
@@ -136,9 +153,11 @@ export function ComprasPorProveedorPage() {
   }
 
   function imprimirListadoCompras() {
-    const totalGeneral = comprasFiltradas.reduce((acc, c) => acc + c.total, 0)
-    const totalPagado = comprasFiltradas.reduce((acc, c) => acc + c.pagado, 0)
-    const totalPorPagar = comprasFiltradas.reduce((acc, c) => acc + c.porPagar, 0)
+    // Las anuladas no van al extracto: nunca fueron una compra real.
+    const comprasDelExtracto = comprasFiltradas.filter((c) => c.estado !== 'AN')
+    const totalGeneral = comprasDelExtracto.reduce((acc, c) => acc + c.total, 0)
+    const totalPagado = comprasDelExtracto.reduce((acc, c) => acc + c.pagado, 0)
+    const totalPorPagar = comprasDelExtracto.reduce((acc, c) => acc + c.porPagar, 0)
 
     const rangoFechas =
       filtros.fechaDesde || filtros.fechaHasta
@@ -159,7 +178,7 @@ export function ComprasPorProveedorPage() {
         { label: 'C. unit.', align: 'right' },
         { label: 'Subtotal', align: 'right' },
       ],
-      grupos: comprasFiltradas.map((c) => ({
+      grupos: comprasDelExtracto.map((c) => ({
         encabezado: `${c.referencias ? `N° ${c.referencias}` : 'Sin comprobante'} · ${new Date(c.fecha).toLocaleDateString()} · Sistema #${c.id}`,
         subencabezado: c.porPagar > 0 ? `Con saldo pendiente: ${money(c.porPagar)}` : 'Pagada',
         filas: c.detalles.map((d) => [
@@ -293,7 +312,14 @@ export function ComprasPorProveedorPage() {
                 <Stack
                   direction="row"
                   spacing={{ xs: 1.5, sm: 3 }}
-                  sx={{ flexWrap: 'wrap', alignItems: 'center', width: '100%', rowGap: 0.5, pr: 1 }}
+                  sx={{
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    width: '100%',
+                    rowGap: 0.5,
+                    pr: 1,
+                    ...(compra.estado === 'AN' && { textDecoration: 'line-through', color: 'text.disabled' }),
+                  }}
                 >
                   <Typography sx={{ fontWeight: 700, minWidth: 160 }}>
                     {compra.referencias ? `N° ${compra.referencias}` : 'Sin comprobante'}
@@ -307,12 +333,16 @@ export function ComprasPorProveedorPage() {
                   <Typography variant="body2" sx={{ minWidth: 100 }}>
                     Pagado: {money(compra.pagado)}
                   </Typography>
-                  <Chip
-                    size="small"
-                    label={compra.porPagar > 0 ? `Debe ${money(compra.porPagar)}` : 'Pagada'}
-                    color={compra.porPagar > 0 ? 'warning' : 'success'}
-                    variant="outlined"
-                  />
+                  {compra.estado === 'AN' ? (
+                    <Chip size="small" label="Anulada" color="error" />
+                  ) : (
+                    <Chip
+                      size="small"
+                      label={compra.porPagar > 0 ? `Debe ${money(compra.porPagar)}` : 'Pagada'}
+                      color={compra.porPagar > 0 ? 'warning' : 'success'}
+                      variant="outlined"
+                    />
+                  )}
                   <Typography variant="caption" color="text.secondary" sx={{ minWidth: 64 }}>
                     Sistema #{compra.id}
                   </Typography>
@@ -320,6 +350,13 @@ export function ComprasPorProveedorPage() {
               </AccordionSummary>
               <AccordionDetails>
                 <Stack spacing={2}>
+                  {compra.estado === 'AN' && (
+                    <Alert severity="error">
+                      <strong>Anulada</strong> por {compra.userBaja ?? '—'}
+                      {compra.fechaBaja && ` el ${new Date(compra.fechaBaja).toLocaleString('es-BO')}`}. Motivo:{' '}
+                      {compra.motivoAnulacion || '—'}
+                    </Alert>
+                  )}
                   <TableContainer component={Paper} variant="outlined">
                     <Table size="small">
                       <TableHead>
@@ -348,22 +385,24 @@ export function ComprasPorProveedorPage() {
                               <TableCell align="right">{money(d.costoUnitario)}</TableCell>
                               <TableCell align="right">{money(d.subTotal)}</TableCell>
                               <TableCell align="right" sx={{ width: 48 }}>
-                                <Tooltip title="Cargar o corregir vencimiento / lote">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      setErrorVencimiento(null)
-                                      setVencimientoEnEdicion({
-                                        idDetalle: d.id,
-                                        articulo: articulo?.descripcion || articulo?.codigo || `#${d.idArticulo}`,
-                                        lote: d.lote ?? '',
-                                        fecha: d.fechaVencimiento ? d.fechaVencimiento.slice(0, 10) : '',
-                                      })
-                                    }}
-                                  >
-                                    <EditIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
+                                {compra.estado !== 'AN' && (
+                                  <Tooltip title="Cargar o corregir vencimiento / lote">
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => {
+                                        setErrorVencimiento(null)
+                                        setVencimientoEnEdicion({
+                                          idDetalle: d.id,
+                                          articulo: articulo?.descripcion || articulo?.codigo || `#${d.idArticulo}`,
+                                          lote: d.lote ?? '',
+                                          fecha: d.fechaVencimiento ? d.fechaVencimiento.slice(0, 10) : '',
+                                        })
+                                      }}
+                                    >
+                                      <EditIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
                               </TableCell>
                             </TableRow>
                           )
@@ -389,17 +428,46 @@ export function ComprasPorProveedorPage() {
 
                   {compra.nota && <Alert severity="info">{compra.nota}</Alert>}
 
-                  <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
-                    <Button variant="contained" startIcon={<PrintIcon />} onClick={() => imprimirNota(compra)}>
-                      Imprimir
-                    </Button>
-                  </Stack>
+                  {compra.estado !== 'AN' && (
+                    <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'flex-end' }}>
+                      {tienePermiso(PERMISO_ANULAR) && (
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          onClick={() => {
+                            setErrorAnular(null)
+                            setCompraAAnular(compra)
+                          }}
+                        >
+                          Anular compra
+                        </Button>
+                      )}
+                      <Button variant="contained" startIcon={<PrintIcon />} onClick={() => imprimirNota(compra)}>
+                        Imprimir
+                      </Button>
+                    </Stack>
+                  )}
                 </Stack>
               </AccordionDetails>
             </Accordion>
           ))}
         </>
       )}
+
+      <AnularDialog
+        open={!!compraAAnular}
+        titulo={`Anular compra${compraAAnular?.referencias ? ` N° ${compraAAnular.referencias}` : ''} (Sistema #${compraAAnular?.id ?? ''})`}
+        mensaje={
+          `La compra de ${compraAAnular ? money(compraAAnular.total) : ''} deja de contar en la deuda con el proveedor, ` +
+          'y su mercadería sale del stock. Si ya se vendió parte, el sistema no te va a dejar (usá Ajuste de stock). ' +
+          'El costo de los artículos no se recalcula: si quedó mal, corregilo en Artículos. ' +
+          'Queda registrada como anulada (no se borra).'
+        }
+        anulando={anularMutation.isPending}
+        error={errorAnular}
+        onConfirmar={(motivo) => compraAAnular && anularMutation.mutate({ id: compraAAnular.id, motivo })}
+        onCancelar={() => setCompraAAnular(null)}
+      />
 
       <Dialog open={!!vencimientoEnEdicion} onClose={() => setVencimientoEnEdicion(null)} maxWidth="xs" fullWidth>
         <DialogTitle>Vencimiento — {vencimientoEnEdicion?.articulo}</DialogTitle>

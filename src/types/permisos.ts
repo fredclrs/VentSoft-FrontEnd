@@ -12,6 +12,7 @@ export const PERMISO_CONFIGURACION = 'configuracion'
 export const PERMISO_ENTREGAS = 'entregas'
 export const PERMISO_LIQUIDACIONES = 'liquidaciones'
 export const PERMISO_VENTAS_POR_VENDEDOR = 'ventas_vendedor'
+export const PERMISO_ANULAR = 'anular'
 
 /** Para el formulario de Usuarios: qué le puede tildar el Administrador a cada usuario. */
 export const OPCIONES_PERMISOS: { value: string; label: string; descripcion: string }[] = [
@@ -28,6 +29,7 @@ export const OPCIONES_PERMISOS: { value: string; label: string; descripcion: str
   { value: PERMISO_ENTREGAS, label: 'Entregas (pago en especie)', descripcion: 'Registrar entregas de bienes (ej: grano, maquinaria) que un cliente trae para pagar su deuda.' },
   { value: PERMISO_LIQUIDACIONES, label: 'Liquidaciones', descripcion: 'Fijar el precio de las entregas pendientes y aplicarlas contra la deuda del cliente.' },
   { value: PERMISO_VENTAS_POR_VENDEDOR, label: 'Ventas por vendedor', descripcion: 'Ver las ventas de todos los vendedores: ranking de desempeño, historial por vendedor y trazabilidad por artículo.' },
+  { value: PERMISO_ANULAR, label: 'Anular ventas y compras', descripcion: 'Anular una venta o compra cargada por error (queda registrado quién, cuándo y por qué). Darlo solo a gente de confianza.' },
 ]
 
 /**

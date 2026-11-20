@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
 import AccordionSummary from '@mui/material/AccordionSummary'
@@ -32,7 +32,10 @@ import { buscarClientesTexto } from '../../api/clientes'
 import { articulosApi } from '../../api/articulos'
 import { usuariosApi } from '../../api/usuarios'
 import { temporadasApi } from '../../api/temporadas'
-import { getVentasByCliente } from '../../api/ventas'
+import { anularVenta, getVentasByCliente } from '../../api/ventas'
+import { AnularDialog } from '../../components/AnularDialog'
+import { useAuth } from '../../auth/AuthContext'
+import { PERMISO_ANULAR } from '../../types/permisos'
 import { getErrorMessage } from '../../api/errors'
 import { filtrarPorFechaYNumero, filtrosAnioActual } from '../../utils/filtrarHistorial'
 import { imprimirNotaVenta } from '../../utils/notaVenta'
@@ -48,6 +51,21 @@ export function VentasPorClientePage() {
   const [filtros, setFiltros] = useState(filtrosAnioActual)
   const [ventaParaDevolucion, setVentaParaDevolucion] = useState<Venta | null>(null)
   const [avisoDevolucion, setAvisoDevolucion] = useState<string | null>(null)
+  const { tienePermiso } = useAuth()
+  const queryClient = useQueryClient()
+  const [ventaAAnular, setVentaAAnular] = useState<Venta | null>(null)
+  const [errorAnular, setErrorAnular] = useState<string | null>(null)
+  const anularMutation = useMutation({
+    mutationFn: ({ id, motivo }: { id: number; motivo: string }) => anularVenta(id, motivo),
+    onSuccess: (venta) => {
+      queryClient.invalidateQueries({ queryKey: ['ventas'] })
+      queryClient.invalidateQueries({ queryKey: ['stock'] })
+      queryClient.invalidateQueries({ queryKey: ['reportes'] })
+      setVentaAAnular(null)
+      setAvisoDevolucion(`Venta #${venta.id} anulada.`)
+    },
+    onError: (err) => setErrorAnular(getErrorMessage(err)),
+  })
 
   // Al cambiar de cliente arrancamos como si se entrara de nuevo al reporte: año en
   // curso, sin N° ni temporada — así no queda un filtro pegado que oculte todo.
@@ -108,9 +126,11 @@ export function VentasPorClientePage() {
   }
 
   function imprimirListadoVentas() {
-    const totalGeneral = ventasFiltradas.reduce((acc, v) => acc + v.total, 0)
-    const totalPagado = ventasFiltradas.reduce((acc, v) => acc + v.pagado, 0)
-    const totalPorPagar = ventasFiltradas.reduce((acc, v) => acc + v.porPagar, 0)
+    // El extracto es para entregarle al cliente: las anuladas no van (nunca fueron una venta).
+    const ventasDelExtracto = ventasFiltradas.filter((v) => v.estado !== 'AN')
+    const totalGeneral = ventasDelExtracto.reduce((acc, v) => acc + v.total, 0)
+    const totalPagado = ventasDelExtracto.reduce((acc, v) => acc + v.pagado, 0)
+    const totalPorPagar = ventasDelExtracto.reduce((acc, v) => acc + v.porPagar, 0)
 
     const rangoFechas =
       filtros.fechaDesde || filtros.fechaHasta
@@ -131,7 +151,7 @@ export function VentasPorClientePage() {
         { label: 'P. unit.', align: 'right' },
         { label: 'Subtotal', align: 'right' },
       ],
-      grupos: ventasFiltradas.map((v) => ({
+      grupos: ventasDelExtracto.map((v) => ({
         encabezado: `Venta #${v.id} · ${new Date(v.fecha).toLocaleDateString()}${v.referencias ? ` · Ref: ${v.referencias}` : ''}`,
         subencabezado: v.porPagar > 0 ? `Con saldo pendiente: ${money(v.porPagar)}` : 'Pagada',
         filas: v.detalles.map((d) => [
@@ -264,7 +284,14 @@ export function VentasPorClientePage() {
                 <Stack
                   direction="row"
                   spacing={{ xs: 1.5, sm: 3 }}
-                  sx={{ flexWrap: 'wrap', alignItems: 'center', width: '100%', rowGap: 0.5, pr: 1 }}
+                  sx={{
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    width: '100%',
+                    rowGap: 0.5,
+                    pr: 1,
+                    ...(venta.estado === 'AN' && { textDecoration: 'line-through', color: 'text.disabled' }),
+                  }}
                 >
                   <Typography sx={{ fontWeight: 700, minWidth: 56 }}>#{venta.id}</Typography>
                   <Typography variant="body2" sx={{ minWidth: 90 }}>
@@ -279,16 +306,27 @@ export function VentasPorClientePage() {
                   <Typography variant="body2" sx={{ minWidth: 100 }}>
                     Pagado: {money(venta.pagado)}
                   </Typography>
-                  <Chip
-                    size="small"
-                    label={venta.porPagar > 0 ? `Debe ${money(venta.porPagar)}` : 'Pagada'}
-                    color={venta.porPagar > 0 ? 'warning' : 'success'}
-                    variant="outlined"
-                  />
+                  {venta.estado === 'AN' ? (
+                    <Chip size="small" label="Anulada" color="error" />
+                  ) : (
+                    <Chip
+                      size="small"
+                      label={venta.porPagar > 0 ? `Debe ${money(venta.porPagar)}` : 'Pagada'}
+                      color={venta.porPagar > 0 ? 'warning' : 'success'}
+                      variant="outlined"
+                    />
+                  )}
                 </Stack>
               </AccordionSummary>
               <AccordionDetails>
                 <Stack spacing={2}>
+                  {venta.estado === 'AN' && (
+                    <Alert severity="error">
+                      <strong>Anulada</strong> por {venta.userBaja ?? '—'}
+                      {venta.fechaBaja && ` el ${new Date(venta.fechaBaja).toLocaleString('es-BO')}`}. Motivo:{' '}
+                      {venta.motivoAnulacion || '—'}
+                    </Alert>
+                  )}
                   <TableContainer component={Paper} variant="outlined">
                     <Table size="small">
                       <TableHead>
@@ -331,12 +369,26 @@ export function VentasPorClientePage() {
 
                   {venta.nota && <Alert severity="info">{venta.nota}</Alert>}
 
-                  <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'flex-end' }}>
-                    <Button variant="outlined" onClick={() => setVentaParaDevolucion(venta)}>
-                      Devolver / cambiar
-                    </Button>
-                    <BotonImprimirNota onImprimir={(formato) => imprimirNota(venta, formato)} />
-                  </Stack>
+                  {venta.estado !== 'AN' && (
+                    <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'flex-end' }}>
+                      {tienePermiso(PERMISO_ANULAR) && (
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          onClick={() => {
+                            setErrorAnular(null)
+                            setVentaAAnular(venta)
+                          }}
+                        >
+                          Anular venta
+                        </Button>
+                      )}
+                      <Button variant="outlined" onClick={() => setVentaParaDevolucion(venta)}>
+                        Devolver / cambiar
+                      </Button>
+                      <BotonImprimirNota onImprimir={(formato) => imprimirNota(venta, formato)} />
+                    </Stack>
+                  )}
                 </Stack>
               </AccordionDetails>
             </Accordion>
@@ -359,6 +411,20 @@ export function VentasPorClientePage() {
           }
         />
       )}
+
+      <AnularDialog
+        open={!!ventaAAnular}
+        titulo={`Anular venta #${ventaAAnular?.id ?? ''}`}
+        mensaje={
+          `La venta de ${ventaAAnular ? money(ventaAAnular.total) : ''} deja de contar en los totales, la caja y la deuda ` +
+          'del cliente, y los artículos vuelven al stock. Si se cobró, devolvé la plata al cliente. ' +
+          'Queda registrada como anulada (no se borra).'
+        }
+        anulando={anularMutation.isPending}
+        error={errorAnular}
+        onConfirmar={(motivo) => ventaAAnular && anularMutation.mutate({ id: ventaAAnular.id, motivo })}
+        onCancelar={() => setVentaAAnular(null)}
+      />
 
       <Snackbar
         open={!!avisoDevolucion}

@@ -51,3 +51,10 @@ export async function getLotesPorVencer(
   })
   return unwrap(data)
 }
+
+/** Anula una compra cargada por error (permiso "anular"). El backend la rechaza si ya tuvo
+ * pagos después o si sacar su mercadería deja stock negativo. */
+export async function anularCompra(idCompra: number, motivo: string): Promise<Compra> {
+  const { data } = await apiClient.post<BaseResponse<Compra>>('/Compra/anular', { idCompra, motivo })
+  return unwrap(data)
+}

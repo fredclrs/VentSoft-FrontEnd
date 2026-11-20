@@ -31,6 +31,10 @@ export interface Venta {
   nota?: string | null
   montoSaldoAFavorAplicado: number
   estado: string
+  /** Solo en anuladas (estado "AN"): motivo, quién y cuándo. */
+  motivoAnulacion?: string | null
+  userBaja?: string | null
+  fechaBaja?: string | null
   idCliente: number
   idUsuario: number
   idPromocion?: number | null

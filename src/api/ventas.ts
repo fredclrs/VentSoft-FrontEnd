@@ -32,3 +32,10 @@ export async function getVentasTodas(): Promise<Venta[]> {
   const { data } = await apiClient.get<BaseResponse<Venta[]>>('/Venta/todas')
   return unwrap(data)
 }
+
+/** Anula una venta cargada por error (permiso "anular"). El backend la rechaza si ya tuvo
+ * cobros o devoluciones después. */
+export async function anularVenta(idVenta: number, motivo: string): Promise<Venta> {
+  const { data } = await apiClient.post<BaseResponse<Venta>>('/Venta/anular', { idVenta, motivo })
+  return unwrap(data)
+}

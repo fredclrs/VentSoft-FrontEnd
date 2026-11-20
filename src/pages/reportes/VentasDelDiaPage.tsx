@@ -34,7 +34,7 @@ import { familiasApi } from '../../api/familias'
 import { usuariosApi } from '../../api/usuarios'
 import { formasDePagoApi } from '../../api/formasDePago'
 import { buscarClientes } from '../../api/clientes'
-import { getVentasDelDia } from '../../api/ventas'
+import { anularVenta, getVentasDelDia } from '../../api/ventas'
 import { getDevolucionesDelDia } from '../../api/devoluciones'
 import { eliminarMovimientoCaja, getMovimientosCajaDelDia, registrarMovimientoCaja } from '../../api/movimientoCaja'
 import { getErrorMessage } from '../../api/errors'
@@ -43,6 +43,8 @@ import { useAuth } from '../../auth/AuthContext'
 import { EntityAutocomplete } from '../../components/EntityAutocomplete'
 import { BotonImprimirNota } from '../../components/BotonImprimirNota'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { AnularDialog } from '../../components/AnularDialog'
+import { PERMISO_ANULAR } from '../../types/permisos'
 import { imprimirNotaVenta } from '../../utils/notaVenta'
 import type { FormatoImpresion } from '../../utils/notaVenta'
 import { imprimirExtracto } from '../../utils/imprimirListado'
@@ -63,7 +65,7 @@ interface TarjetaResumen {
 }
 
 export function VentasDelDiaPage() {
-  const { usuario } = useAuth()
+  const { usuario, tienePermiso } = useAuth()
   const queryClient = useQueryClient()
   const { nombreNegocio, simboloMoneda, money } = useConfiguracionEmpresa()
   const [fecha, setFecha] = useState(hoyISO)
@@ -87,6 +89,23 @@ export function VentasDelDiaPage() {
     () => [...(ventasQuery.data ?? [])].sort((a, b) => a.id - b.id),
     [ventasQuery.data],
   )
+  // Las anuladas se siguen mostrando (tachadas, para que el dueño las vea), pero no cuentan
+  // para ningún total: ni vendido, ni cobrado, ni caja, ni ganancia.
+  const ventasActivas = useMemo(() => ventasDelDia.filter((v) => v.estado !== 'AN'), [ventasDelDia])
+  const ventasAnuladas = useMemo(() => ventasDelDia.filter((v) => v.estado === 'AN'), [ventasDelDia])
+
+  const [ventaAAnular, setVentaAAnular] = useState<Venta | null>(null)
+  const [errorAnular, setErrorAnular] = useState<string | null>(null)
+  const anularMutation = useMutation({
+    mutationFn: ({ id, motivo }: { id: number; motivo: string }) => anularVenta(id, motivo),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ventas'] })
+      queryClient.invalidateQueries({ queryKey: ['stock'] })
+      queryClient.invalidateQueries({ queryKey: ['reportes'] })
+      setVentaAAnular(null)
+    },
+    onError: (err) => setErrorAnular(getErrorMessage(err)),
+  })
 
   const clientesQuery = useQuery({ queryKey: ['clientes-todos'], queryFn: () => buscarClientes() })
   const clientePorId = useMemo(
@@ -201,7 +220,8 @@ export function VentasDelDiaPage() {
     if (!hayFiltroProducto) return null
     let cantidad = 0
     let total = 0
-    for (const { detalles } of ventasVisibles) {
+    for (const { venta, detalles } of ventasVisibles) {
+      if (venta.estado === 'AN') continue
       for (const d of detalles) {
         cantidad += d.cantidad
         total += d.subTotal
@@ -216,7 +236,7 @@ export function VentasDelDiaPage() {
     let gananciaBruta = 0
     let hayCostoAproximado = false
 
-    for (const venta of ventasDelDia) {
+    for (const venta of ventasActivas) {
       totalVendido += venta.total
       totalCobrado += venta.pagado
       for (const d of venta.detalles) {
@@ -232,7 +252,7 @@ export function VentasDelDiaPage() {
     }
 
     return { totalVendido, totalCobrado, totalPorCobrar: totalVendido - totalCobrado, gananciaBruta, hayCostoAproximado }
-  }, [ventasDelDia, articuloPorId])
+  }, [ventasActivas, articuloPorId])
 
   // Efectivo real que debería haber en la caja hoy — para negocios que venden solo al contado.
   // NO es lo mismo que "Total cobrado": ese incluye plata que en realidad no entró hoy (saldo a
@@ -242,7 +262,7 @@ export function VentasDelDiaPage() {
   // transferencia (ver esVentaEnEfectivo) — eso no es plata física, no debería estar en la caja.
   const efectivoEnCaja = useMemo(() => {
     let efectivo = 0
-    for (const venta of ventasDelDia) {
+    for (const venta of ventasActivas) {
       if (esVentaEnEfectivo(venta)) {
         efectivo += venta.pagado - venta.montoSaldoAFavorAplicado
       }
@@ -254,19 +274,19 @@ export function VentasDelDiaPage() {
       efectivo += m.tipo === 'ENTRADA' ? m.monto : -m.monto
     }
     return efectivo
-  }, [ventasDelDia, devolucionesQuery.data, movimientosCajaQuery.data, esVentaEnEfectivo])
+  }, [ventasActivas, devolucionesQuery.data, movimientosCajaQuery.data, esVentaEnEfectivo])
 
   // Lo cobrado hoy por Tarjeta/QR/transferencia (cualquier forma de pago marcada explícitamente
   // como NO efectivo) — plata que no está en la caja física, pero sí entró al negocio.
   const cobradoPorOtrosMedios = useMemo(() => {
     let total = 0
-    for (const venta of ventasDelDia) {
+    for (const venta of ventasActivas) {
       if (!esVentaEnEfectivo(venta)) {
         total += venta.pagado
       }
     }
     return total
-  }, [ventasDelDia, esVentaEnEfectivo])
+  }, [ventasActivas, esVentaEnEfectivo])
 
   const tarjetas: TarjetaResumen[] = [
     { label: 'Total vendido', valor: `${money(totales.totalVendido)}` },
@@ -331,7 +351,7 @@ export function VentasDelDiaPage() {
         { label: 'P. unit.', align: 'right' },
         { label: 'Subtotal', align: 'right' },
       ],
-      grupos: ventasVisibles.map(({ venta: v, detalles }) => ({
+      grupos: ventasVisibles.filter(({ venta }) => venta.estado !== 'AN').map(({ venta: v, detalles }) => ({
         encabezado: `Venta #${v.id} · Cliente: ${clientePorId.get(v.idCliente)?.nombre ?? `#${v.idCliente}`}`,
         subencabezado: v.referencias ? `Ref: ${v.referencias}` : undefined,
         filas: detalles.map((d) => [
@@ -364,6 +384,14 @@ export function VentasDelDiaPage() {
             },
             { label: 'Efectivo que debería haber en la caja', valor: `${money(efectivoEnCaja)}` },
             { label: 'Cobrado por Tarjeta/QR/otros', valor: `${money(cobradoPorOtrosMedios)}` },
+            ...(ventasAnuladas.length > 0
+              ? [
+                  {
+                    label: 'Ventas anuladas (no suman)',
+                    valor: `${ventasAnuladas.length} · ${money(ventasAnuladas.reduce((acc, v) => acc + v.total, 0))}`,
+                  },
+                ]
+              : []),
           ],
     })
   }
@@ -564,6 +592,15 @@ export function VentasDelDiaPage() {
             )}
           </Paper>
 
+          {ventasAnuladas.length > 0 && (
+            <Alert severity="warning">
+              Ese día se {ventasAnuladas.length === 1 ? 'anuló 1 venta' : `anularon ${ventasAnuladas.length} ventas`} por{' '}
+              <strong>{money(ventasAnuladas.reduce((acc, v) => acc + v.total, 0))}</strong> (
+              {ventasAnuladas.map((v) => `#${v.id} por ${v.userBaja ?? '—'}`).join(', ')}). No suman en ningún total;
+              aparecen tachadas en la lista, con el motivo adentro.
+            </Alert>
+          )}
+
           {totales.hayCostoAproximado && (
             <Alert severity="info">
               Alguna de estas ventas es de antes de que el sistema empezara a guardar el costo exacto de cada
@@ -647,7 +684,14 @@ export function VentasDelDiaPage() {
                 <Stack
                   direction="row"
                   spacing={{ xs: 1.5, sm: 3 }}
-                  sx={{ flexWrap: 'wrap', alignItems: 'center', width: '100%', rowGap: 0.5, pr: 1 }}
+                  sx={{
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    width: '100%',
+                    rowGap: 0.5,
+                    pr: 1,
+                    ...(venta.estado === 'AN' && { textDecoration: 'line-through', color: 'text.disabled' }),
+                  }}
                 >
                   <Typography sx={{ fontWeight: 700, minWidth: 56 }}>#{venta.id}</Typography>
                   <Typography variant="body2" sx={{ minWidth: 160 }}>
@@ -662,16 +706,27 @@ export function VentasDelDiaPage() {
                   <Typography variant="body2" sx={{ minWidth: 100 }}>
                     Pagado: {money(venta.pagado)}
                   </Typography>
-                  <Chip
-                    size="small"
-                    label={venta.porPagar > 0 ? `Debe ${money(venta.porPagar)}` : 'Pagada'}
-                    color={venta.porPagar > 0 ? 'warning' : 'success'}
-                    variant="outlined"
-                  />
+                  {venta.estado === 'AN' ? (
+                    <Chip size="small" label="Anulada" color="error" sx={{ textDecoration: 'none' }} />
+                  ) : (
+                    <Chip
+                      size="small"
+                      label={venta.porPagar > 0 ? `Debe ${money(venta.porPagar)}` : 'Pagada'}
+                      color={venta.porPagar > 0 ? 'warning' : 'success'}
+                      variant="outlined"
+                    />
+                  )}
                 </Stack>
               </AccordionSummary>
               <AccordionDetails>
                 <Stack spacing={2}>
+                  {venta.estado === 'AN' && (
+                    <Alert severity="error">
+                      <strong>Anulada</strong> por {venta.userBaja ?? '—'}
+                      {venta.fechaBaja && ` el ${new Date(venta.fechaBaja).toLocaleString('es-BO')}`}. Motivo:{' '}
+                      {venta.motivoAnulacion || '—'}
+                    </Alert>
+                  )}
                   {hayFiltroProducto && (
                     <Alert severity="info" sx={{ py: 0 }}>
                       Mostrando solo los renglones que coinciden con el filtro — esta venta puede
@@ -718,9 +773,24 @@ export function VentasDelDiaPage() {
 
                   {venta.nota && <Alert severity="info">{venta.nota}</Alert>}
 
-                  <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
-                    <BotonImprimirNota onImprimir={(formato) => imprimirNota(venta, formato)} />
-                  </Stack>
+                  {/* Anulada: ni anular de nuevo ni imprimir (sería un comprobante de una venta que no existe). */}
+                  {venta.estado !== 'AN' && (
+                    <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+                      {tienePermiso(PERMISO_ANULAR) && (
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          onClick={() => {
+                            setErrorAnular(null)
+                            setVentaAAnular(venta)
+                          }}
+                        >
+                          Anular venta
+                        </Button>
+                      )}
+                      <BotonImprimirNota onImprimir={(formato) => imprimirNota(venta, formato)} />
+                    </Stack>
+                  )}
                 </Stack>
               </AccordionDetails>
             </Accordion>
@@ -788,6 +858,20 @@ export function VentasDelDiaPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <AnularDialog
+        open={!!ventaAAnular}
+        titulo={`Anular venta #${ventaAAnular?.id ?? ''}`}
+        mensaje={
+          `La venta de ${ventaAAnular ? money(ventaAAnular.total) : ''} deja de contar en los totales, la caja y la deuda ` +
+          'del cliente, y los artículos vuelven al stock. Si se cobró, devolvé la plata al cliente. ' +
+          'Queda registrada como anulada (no se borra).'
+        }
+        anulando={anularMutation.isPending}
+        error={errorAnular}
+        onConfirmar={(motivo) => ventaAAnular && anularMutation.mutate({ id: ventaAAnular.id, motivo })}
+        onCancelar={() => setVentaAAnular(null)}
+      />
 
       <ConfirmDialog
         open={!!movimientoAEliminar}

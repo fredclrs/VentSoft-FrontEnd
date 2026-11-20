@@ -38,6 +38,10 @@ export interface Compra {
   porPagar: number
   nota?: string | null
   estado: string
+  /** Solo en anuladas (estado "AN"): motivo, quién y cuándo. */
+  motivoAnulacion?: string | null
+  userBaja?: string | null
+  fechaBaja?: string | null
   idUsuario: number
   idProveedor: number
   detalles: DetalleCompra[]
