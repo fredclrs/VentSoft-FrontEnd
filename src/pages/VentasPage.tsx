@@ -41,6 +41,8 @@ import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import { buscarClientesTexto } from '../api/clientes'
 import { articulosApi, buscarArticulos, getStockTodos } from '../api/articulos'
 import { formasDePagoApi } from '../api/formasDePago'
+import { promocionesApi } from '../api/promociones'
+import { descuentoPromocion, etiquetaPromocion } from '../utils/promocion'
 import { registrarVenta } from '../api/ventas'
 import { useAuth } from '../auth/AuthContext'
 import { getErrorMessage } from '../api/errors'
@@ -123,6 +125,23 @@ export function VentasPage() {
   const formasDePagoQuery = useQuery({ queryKey: ['formasDePago'], queryFn: () => formasDePagoApi.search() })
   const formaDePagoSeleccionada = (formasDePagoQuery.data ?? []).find((f) => f.id === idFormaDePago)
 
+  // Promoción asociada a cada artículo (Artículos → Promoción): se aplica sola en el renglón
+  // como descuento — ver utils/promocion.ts.
+  const promocionesQuery = useQuery({ queryKey: ['promociones'], queryFn: () => promocionesApi.search() })
+  const promocionPorId = useMemo(
+    () => new Map((promocionesQuery.data ?? []).map((p) => [p.id, p])),
+    [promocionesQuery.data],
+  )
+  function promocionDe(linea: LineaVenta) {
+    return linea.articulo.idPromocion ? promocionPorId.get(linea.articulo.idPromocion) : undefined
+  }
+  function descuentoDe(linea: LineaVenta) {
+    return descuentoPromocion(promocionDe(linea), aUnidades(linea), precioPorUnidadDe(linea))
+  }
+  function subtotalDe(linea: LineaVenta) {
+    return linea.cantidad * linea.precioUnitario - descuentoDe(linea)
+  }
+
   // Stock de todo el catálogo, para poder mostrar "sin stock" y bloquear el agregado antes de
   // llegar a registrar la venta (el backend igual lo vuelve a validar al confirmar).
   const stockQuery = useQuery({ queryKey: ['stock', 'todos'], queryFn: getStockTodos })
@@ -179,7 +198,7 @@ export function VentasPage() {
     return libreUnidades >= necesarias
   }
 
-  const total = useMemo(() => lineas.reduce((acc, l) => acc + l.cantidad * l.precioUnitario, 0), [lineas])
+  const total = lineas.reduce((acc, l) => acc + subtotalDe(l), 0)
   // Recargo aplicado sobre el total completo (no solo lo que se cobra ahora) — así la deuda
   // pendiente de una venta a crédito también queda con el recargo incluido.
   const totalConRecargo = total * (1 + recargoPorcentaje / 100)
@@ -307,6 +326,7 @@ export function VentasPage() {
         idArticulo: l.articulo.id,
         cantidad: aUnidades(l),
         precioUnitario: precioPorUnidadDe(l),
+        descuentoMonetario: descuentoDe(l) || undefined,
       }))
 
       return registrarVenta({
@@ -345,16 +365,20 @@ export function VentasPage() {
           vendedor: usuario!.nombre,
           referencia: referencias || undefined,
           nota: nota || undefined,
-          items: lineas.map((l) => ({
-            codigo: l.articulo.codigo,
-            descripcion:
+          items: lineas.map((l) => {
+            const promo = descuentoDe(l) > 0 ? promocionDe(l) : undefined
+            const descripcion =
               l.modo === 'caja' && fraccionDe(l.articulo) > 1
                 ? `${l.articulo.descripcion ?? ''} (paquete x${fraccionDe(l.articulo)})`
-                : l.articulo.descripcion,
-            cantidad: l.cantidad,
-            precioUnitario: l.precioUnitario,
-            subtotal: l.cantidad * l.precioUnitario,
-          })),
+                : l.articulo.descripcion
+            return {
+              codigo: l.articulo.codigo,
+              descripcion: promo ? `${descripcion ?? ''} — Promo ${etiquetaPromocion(promo, money)}` : descripcion,
+              cantidad: l.cantidad,
+              precioUnitario: l.precioUnitario,
+              subtotal: subtotalDe(l),
+            }
+          }),
           total: venta.total,
           pagado: venta.pagado,
           porPagar: venta.porPagar,
@@ -1001,7 +1025,20 @@ export function VentasPage() {
                       slotProps={{ htmlInput: { style: { textAlign: 'right' } } }}
                     />
                   </TableCell>
-                  <TableCell align="right">{money(linea.cantidad * linea.precioUnitario)}</TableCell>
+                  <TableCell align="right">
+                    {money(subtotalDe(linea))}
+                    {descuentoDe(linea) > 0 && (
+                      <Box>
+                        <Chip
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                          label={`Promo ${etiquetaPromocion(promocionDe(linea)!, money)}`}
+                          title={`Ahorro: ${money(descuentoDe(linea))}`}
+                        />
+                      </Box>
+                    )}
+                  </TableCell>
                   <TableCell align="right">
                     <IconButton size="small" color="error" onClick={() => quitarLinea(index)}>
                       <DeleteIcon fontSize="small" />

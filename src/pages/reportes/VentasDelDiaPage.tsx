@@ -225,7 +225,9 @@ export function VentasDelDiaPage() {
         // disponible, y ahí se cae de vuelta al costo ACTUAL del artículo como aproximación.
         if (d.costoUnitario == null) hayCostoAproximado = true
         const costo = d.costoUnitario ?? articuloPorId.get(d.idArticulo)?.costo ?? 0
-        gananciaBruta += (d.precioUnitario - costo) * d.cantidad
+        // subTotal (no precioUnitario × cantidad): ya trae restado el descuento del renglón
+        // (ej. promoción 2x500), que es lo que realmente entró.
+        gananciaBruta += d.subTotal - costo * d.cantidad
       }
     }
 

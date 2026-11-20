@@ -46,6 +46,12 @@ interface LineaCambio {
   precioUnitario: number
 }
 
+/** Lo que realmente se cobró por unidad en la venta original (igual que el backend): si el
+ * renglón tuvo descuento (ej. promoción 2x500), se devuelve eso y no el precio de lista. */
+function precioCobrado(d: { cantidad: number; precioUnitario: number; subTotal: number }): number {
+  return d.cantidad > 0 ? d.subTotal / d.cantidad : d.precioUnitario
+}
+
 interface DevolucionDialogProps {
   open: boolean
   onClose: () => void
@@ -120,7 +126,7 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
     () =>
       venta.detalles.reduce((acc, d) => {
         const cant = Number(cantidades[d.id]) || 0
-        return acc + cant * d.precioUnitario
+        return acc + cant * precioCobrado(d)
       }, 0),
     [cantidades, venta.detalles],
   )
@@ -262,8 +268,8 @@ export function DevolucionDialog({ open, onClose, venta, cliente, onSuccess }: D
                 codigo: articulo?.codigo ?? `#${d.idArticulo}`,
                 descripcion: articulo?.descripcion,
                 cantidad: Number(cantidades[d.id]),
-                precioUnitario: d.precioUnitario,
-                subtotal: Number(cantidades[d.id]) * d.precioUnitario,
+                precioUnitario: precioCobrado(d),
+                subtotal: Number(cantidades[d.id]) * precioCobrado(d),
               }
             }),
           nuevos: articulosNuevos.map((l) => ({

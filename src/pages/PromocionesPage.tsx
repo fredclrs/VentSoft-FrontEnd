@@ -19,6 +19,11 @@ export function PromocionesPage() {
       columns={[
         { key: 'nombrePromocion', label: 'Nombre' },
         {
+          key: 'cantidadPromo',
+          label: 'Lleva N por',
+          render: (p) => (p.cantidadPromo && p.precioPromo ? `${p.cantidadPromo} x ${p.precioPromo.toFixed(2)}` : '—'),
+        },
+        {
           key: 'descuentoPorcentaje',
           label: 'Descuento %',
           render: (p) => (p.descuentoPorcentaje ? `${p.descuentoPorcentaje}%` : '—'),
@@ -32,19 +37,42 @@ export function PromocionesPage() {
       ]}
       fields={[
         { key: 'nombrePromocion', label: 'Nombre', required: true },
+        {
+          key: 'cantidadPromo',
+          label: 'Llevando (cantidad)',
+          type: 'number',
+          helperText: 'Para promos tipo "2x500": acá va el 2.',
+        },
+        {
+          key: 'precioPromo',
+          label: 'Se cobra en total',
+          type: 'number',
+          helperText: 'Y acá el 500 (el precio por las 2 juntas, no por cada una).',
+        },
         { key: 'descuentoPorcentaje', label: 'Descuento (%)', type: 'number' },
-        { key: 'descuentoMonetario', label: 'Descuento (monto fijo)', type: 'number' },
+        { key: 'descuentoMonetario', label: 'Descuento (monto fijo por unidad)', type: 'number' },
         { key: 'descripcion', label: 'Descripción', multiline: true },
       ]}
-      emptyForm={{ nombrePromocion: '', descuentoPorcentaje: '', descuentoMonetario: '', descripcion: '' }}
+      emptyForm={{
+        nombrePromocion: '',
+        cantidadPromo: '',
+        precioPromo: '',
+        descuentoPorcentaje: '',
+        descuentoMonetario: '',
+        descripcion: '',
+      }}
       toFormState={(p) => ({
         nombrePromocion: p.nombrePromocion,
+        cantidadPromo: p.cantidadPromo?.toString() ?? '',
+        precioPromo: p.precioPromo?.toString() ?? '',
         descuentoPorcentaje: p.descuentoPorcentaje?.toString() ?? '',
         descuentoMonetario: p.descuentoMonetario?.toString() ?? '',
         descripcion: p.descripcion ?? '',
       })}
       serialize={(form) => ({
         nombrePromocion: form.nombrePromocion,
+        cantidadPromo: numeroOUndefined(form.cantidadPromo),
+        precioPromo: numeroOUndefined(form.precioPromo),
         descuentoPorcentaje: numeroOUndefined(form.descuentoPorcentaje),
         descuentoMonetario: numeroOUndefined(form.descuentoMonetario),
         descripcion: form.descripcion || undefined,
