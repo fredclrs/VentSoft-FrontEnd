@@ -20,8 +20,13 @@ export function PromocionesPage() {
         { key: 'nombrePromocion', label: 'Nombre' },
         {
           key: 'cantidadPromo',
-          label: 'Lleva N por',
-          render: (p) => (p.cantidadPromo && p.precioPromo ? `${p.cantidadPromo} x ${p.precioPromo.toFixed(2)}` : '—'),
+          label: 'Por cantidad',
+          render: (p) => {
+            if (!p.cantidadPromo || !p.precioPromo) return '—'
+            return p.esPrecioPorMayor
+              ? `Desde ${p.cantidadPromo}: ${p.precioPromo.toFixed(2)} c/u`
+              : `${p.cantidadPromo} x ${p.precioPromo.toFixed(2)}`
+          },
         },
         {
           key: 'descuentoPorcentaje',
@@ -38,16 +43,28 @@ export function PromocionesPage() {
       fields={[
         { key: 'nombrePromocion', label: 'Nombre', required: true },
         {
+          key: 'tipoCantidad',
+          label: 'Tipo de promo por cantidad',
+          type: 'select',
+          options: [
+            { value: 'grupo', label: 'Lleva N y paga un total (ej. 2 x 500)' },
+            { value: 'mayor', label: 'Precio por mayor (ej. desde 3, cada una a 450)' },
+          ],
+          helperText:
+            '2 x 500: si llevan 3, se cobran 2 a 500 y 1 a precio normal. ' +
+            'Por mayor: si llegan a la cantidad, TODAS van al precio rebajado.',
+        },
+        {
           key: 'cantidadPromo',
-          label: 'Llevando (cantidad)',
+          label: 'Cantidad',
           type: 'number',
-          helperText: 'Para promos tipo "2x500": acá va el 2.',
+          helperText: '"2 x 500" → 2.  "Desde 3 a 450" → 3.',
         },
         {
           key: 'precioPromo',
-          label: 'Se cobra en total',
+          label: 'Precio',
           type: 'number',
-          helperText: 'Y acá el 500 (el precio por las 2 juntas, no por cada una).',
+          helperText: '"2 x 500" → 500 (por las 2 juntas).  "Desde 3 a 450" → 450 (cada una).',
         },
         { key: 'descuentoPorcentaje', label: 'Descuento (%)', type: 'number' },
         { key: 'descuentoMonetario', label: 'Descuento (monto fijo por unidad)', type: 'number' },
@@ -55,6 +72,7 @@ export function PromocionesPage() {
       ]}
       emptyForm={{
         nombrePromocion: '',
+        tipoCantidad: 'grupo',
         cantidadPromo: '',
         precioPromo: '',
         descuentoPorcentaje: '',
@@ -63,6 +81,7 @@ export function PromocionesPage() {
       }}
       toFormState={(p) => ({
         nombrePromocion: p.nombrePromocion,
+        tipoCantidad: p.esPrecioPorMayor ? 'mayor' : 'grupo',
         cantidadPromo: p.cantidadPromo?.toString() ?? '',
         precioPromo: p.precioPromo?.toString() ?? '',
         descuentoPorcentaje: p.descuentoPorcentaje?.toString() ?? '',
@@ -73,6 +92,7 @@ export function PromocionesPage() {
         nombrePromocion: form.nombrePromocion,
         cantidadPromo: numeroOUndefined(form.cantidadPromo),
         precioPromo: numeroOUndefined(form.precioPromo),
+        esPrecioPorMayor: form.tipoCantidad === 'mayor',
         descuentoPorcentaje: numeroOUndefined(form.descuentoPorcentaje),
         descuentoMonetario: numeroOUndefined(form.descuentoMonetario),
         descripcion: form.descripcion || undefined,
