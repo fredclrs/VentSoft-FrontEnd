@@ -34,6 +34,7 @@ import { imprimirNotaVenta } from '../../utils/notaVenta'
 import type { FormatoImpresion } from '../../utils/notaVenta'
 import { imprimirListado } from '../../utils/imprimirListado'
 import { useConfiguracionEmpresa } from '../../hooks/useConfiguracionEmpresa'
+import { etiquetaArticuloDeRenglon } from '../../utils/articulo'
 import type { Usuario } from '../../types/usuario'
 import type { Venta } from '../../types/venta'
 
@@ -42,7 +43,7 @@ import type { Venta } from '../../types/venta'
  * "ventas_vendedor", independiente de "ventas": deja ver el desempeño de todos sin
  * necesitar poder vender. */
 export function VentasPorVendedorPage() {
-  const { nombreNegocio, simboloMoneda, money } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos } = useConfiguracionEmpresa()
   const [filtros, setFiltros] = useState(filtrosAnioActual)
   const [vendedor, setVendedor] = useState<Usuario | null>(null)
 
@@ -262,7 +263,7 @@ export function VentasPorVendedorPage() {
                       <TableBody>
                         {venta.detalles.map((d) => (
                           <TableRow key={d.id}>
-                            <TableCell>{articuloPorId.get(d.idArticulo)?.codigo ?? `#${d.idArticulo}`}</TableCell>
+                            <TableCell>{etiquetaArticuloDeRenglon(articuloPorId.get(d.idArticulo), d.idArticulo, permiteCodigoCompartidoEntreArticulos)}</TableCell>
                             <TableCell align="right">{d.cantidad}</TableCell>
                             <TableCell align="right">{money(d.precioUnitario)}</TableCell>
                             <TableCell align="right">{money(d.subTotal)}</TableCell>

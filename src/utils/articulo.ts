@@ -72,3 +72,13 @@ export function etiquetaArticulo(
   const variante = resumenVariante(articulo)
   return variante ? `${base} (${variante})` : base
 }
+
+/** Igual que etiquetaArticulo, para los renglones de reportes que solo traen idArticulo: si el
+ * artículo todavía no cargó (o ya no existe) muestra "#id" en vez de romper. */
+export function etiquetaArticuloDeRenglon(
+  articulo: Pick<Articulo, 'codigo' | 'descripcion' | 'tamano' | 'caracteristicas'> | undefined,
+  idArticulo: number,
+  incluirVariante: boolean,
+): string {
+  return articulo ? etiquetaArticulo(articulo, incluirVariante) : `#${idArticulo}`
+}

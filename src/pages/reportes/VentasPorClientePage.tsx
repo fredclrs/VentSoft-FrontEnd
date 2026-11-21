@@ -42,11 +42,12 @@ import { imprimirNotaVenta } from '../../utils/notaVenta'
 import type { FormatoImpresion } from '../../utils/notaVenta'
 import { imprimirExtracto } from '../../utils/imprimirListado'
 import { useConfiguracionEmpresa } from '../../hooks/useConfiguracionEmpresa'
+import { etiquetaArticuloDeRenglon } from '../../utils/articulo'
 import type { Cliente } from '../../types/cliente'
 import type { Venta } from '../../types/venta'
 
 export function VentasPorClientePage() {
-  const { nombreNegocio, simboloMoneda, money } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos } = useConfiguracionEmpresa()
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [filtros, setFiltros] = useState(filtrosAnioActual)
   const [ventaParaDevolucion, setVentaParaDevolucion] = useState<Venta | null>(null)
@@ -155,7 +156,7 @@ export function VentasPorClientePage() {
         encabezado: `Venta #${v.id} · ${new Date(v.fecha).toLocaleDateString()}${v.referencias ? ` · Ref: ${v.referencias}` : ''}`,
         subencabezado: v.porPagar > 0 ? `Con saldo pendiente: ${money(v.porPagar)}` : 'Pagada',
         filas: v.detalles.map((d) => [
-          articuloPorId.get(d.idArticulo)?.codigo ?? `#${d.idArticulo}`,
+          etiquetaArticuloDeRenglon(articuloPorId.get(d.idArticulo), d.idArticulo, permiteCodigoCompartidoEntreArticulos),
           d.cantidad,
           money(d.precioUnitario),
           money(d.subTotal),
@@ -340,7 +341,7 @@ export function VentasPorClientePage() {
                       <TableBody>
                         {venta.detalles.map((d) => (
                           <TableRow key={d.id}>
-                            <TableCell>{articuloPorId.get(d.idArticulo)?.codigo ?? `#${d.idArticulo}`}</TableCell>
+                            <TableCell>{etiquetaArticuloDeRenglon(articuloPorId.get(d.idArticulo), d.idArticulo, permiteCodigoCompartidoEntreArticulos)}</TableCell>
                             <TableCell align="right">{d.cantidad}</TableCell>
                             <TableCell align="right">{money(d.precioUnitario)}</TableCell>
                             <TableCell align="right">{money(d.subTotal)}</TableCell>

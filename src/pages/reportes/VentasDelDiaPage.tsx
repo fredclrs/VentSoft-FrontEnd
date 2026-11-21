@@ -39,6 +39,7 @@ import { getDevolucionesDelDia } from '../../api/devoluciones'
 import { eliminarMovimientoCaja, getMovimientosCajaDelDia, registrarMovimientoCaja } from '../../api/movimientoCaja'
 import { getErrorMessage } from '../../api/errors'
 import { useConfiguracionEmpresa } from '../../hooks/useConfiguracionEmpresa'
+import { etiquetaArticuloDeRenglon } from '../../utils/articulo'
 import { useAuth } from '../../auth/AuthContext'
 import { EntityAutocomplete } from '../../components/EntityAutocomplete'
 import { BotonImprimirNota } from '../../components/BotonImprimirNota'
@@ -67,7 +68,7 @@ interface TarjetaResumen {
 export function VentasDelDiaPage() {
   const { usuario, tienePermiso } = useAuth()
   const queryClient = useQueryClient()
-  const { nombreNegocio, simboloMoneda, money } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos } = useConfiguracionEmpresa()
   const [fecha, setFecha] = useState(hoyISO)
   const [articuloFiltro, setArticuloFiltro] = useState<Articulo | null>(null)
   const [idFamiliaFiltro, setIdFamiliaFiltro] = useState<number | ''>('')
@@ -355,7 +356,7 @@ export function VentasDelDiaPage() {
         encabezado: `Venta #${v.id} · Cliente: ${clientePorId.get(v.idCliente)?.nombre ?? `#${v.idCliente}`}`,
         subencabezado: v.referencias ? `Ref: ${v.referencias}` : undefined,
         filas: detalles.map((d) => [
-          articuloPorId.get(d.idArticulo)?.codigo ?? `#${d.idArticulo}`,
+          etiquetaArticuloDeRenglon(articuloPorId.get(d.idArticulo), d.idArticulo, permiteCodigoCompartidoEntreArticulos),
           d.cantidad,
           money(d.precioUnitario),
           money(d.subTotal),
@@ -746,7 +747,7 @@ export function VentasDelDiaPage() {
                       <TableBody>
                         {detalles.map((d) => (
                           <TableRow key={d.id}>
-                            <TableCell>{articuloPorId.get(d.idArticulo)?.codigo ?? `#${d.idArticulo}`}</TableCell>
+                            <TableCell>{etiquetaArticuloDeRenglon(articuloPorId.get(d.idArticulo), d.idArticulo, permiteCodigoCompartidoEntreArticulos)}</TableCell>
                             <TableCell align="right">{d.cantidad}</TableCell>
                             <TableCell align="right">{money(d.precioUnitario)}</TableCell>
                             <TableCell align="right">{money(d.subTotal)}</TableCell>

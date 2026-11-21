@@ -43,6 +43,7 @@ import { filtrarPorFechaYNumero, filtrosAnioActual } from '../../utils/filtrarHi
 import { imprimirNotaCompra } from '../../utils/notaCompra'
 import { imprimirExtracto } from '../../utils/imprimirListado'
 import { useConfiguracionEmpresa } from '../../hooks/useConfiguracionEmpresa'
+import { etiquetaArticuloDeRenglon } from '../../utils/articulo'
 import type { Proveedor } from '../../types/proveedor'
 import type { Compra } from '../../types/compra'
 
@@ -55,7 +56,7 @@ function fechaCorta(fecha: string | null | undefined): string {
 }
 
 export function ComprasPorProveedorPage() {
-  const { nombreNegocio, simboloMoneda, money } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos } = useConfiguracionEmpresa()
   const [proveedor, setProveedor] = useState<Proveedor | null>(null)
   const [filtros, setFiltros] = useState(filtrosAnioActual)
 
@@ -182,7 +183,7 @@ export function ComprasPorProveedorPage() {
         encabezado: `${c.referencias ? `N° ${c.referencias}` : 'Sin comprobante'} · ${new Date(c.fecha).toLocaleDateString()} · Sistema #${c.id}`,
         subencabezado: c.porPagar > 0 ? `Con saldo pendiente: ${money(c.porPagar)}` : 'Pagada',
         filas: c.detalles.map((d) => [
-          articuloPorId.get(d.idArticulo)?.codigo ?? `#${d.idArticulo}`,
+          etiquetaArticuloDeRenglon(articuloPorId.get(d.idArticulo), d.idArticulo, permiteCodigoCompartidoEntreArticulos),
           d.cantidad,
           money(d.costoUnitario),
           money(d.subTotal),
