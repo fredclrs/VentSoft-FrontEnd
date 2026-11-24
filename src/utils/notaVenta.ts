@@ -39,15 +39,15 @@ export interface NotaVentaData {
 export type FormatoImpresion = 'ticket58' | 'ticket80' | 'hoja'
 
 /** Estilos del ticket térmico. Todo en negro puro (las térmicas imprimen el gris casi
- * invisible), sin márgenes de página y con el ancho imprimible real del papel
- * (58mm → ~48mm útiles, 80mm → ~72mm útiles; se deja un poco menos por las dudas). */
+ * invisible), sin márgenes de página, pegado a la orilla izquierda y con el ancho
+ * imprimible real del papel (58mm → ~48mm útiles, 80mm → ~72mm útiles). */
 function estilosTicket(anchoPapelMm: number, anchoUtilMm: number, fuentePx: number) {
   return `
   @page { size: ${anchoPapelMm}mm auto; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #fff; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: ${fuentePx}px; color: #000;
-         width: ${anchoUtilMm}mm; margin: 0 auto; padding: 1mm 0 4mm; line-height: 1.25; }
+         width: ${anchoUtilMm}mm; margin: 0; padding: 1mm 0 4mm; line-height: 1.25; }
   h1 { font-size: ${fuentePx + 4}px; margin: 0 0 2px; text-align: center; }
   .sub { text-align: center; margin-bottom: 6px; }
   .datos div { margin-bottom: 1px; overflow-wrap: anywhere; }
@@ -145,7 +145,7 @@ export function imprimirNotaVenta(data: NotaVentaData, formato: FormatoImpresion
   } else {
     // En papel angosto no entran 5 columnas: cada artículo va en dos renglones
     // (descripción arriba; "cantidad x precio" y el subtotal abajo, a la derecha).
-    estilos = formato === 'ticket58' ? estilosTicket(58, 46, 11) : estilosTicket(80, 70, 12)
+    estilos = formato === 'ticket58' ? estilosTicket(58, 48, 11) : estilosTicket(80, 72, 12)
     const items = data.items
       .map(
         (item) => `
