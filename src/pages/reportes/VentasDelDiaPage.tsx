@@ -68,7 +68,8 @@ interface TarjetaResumen {
 export function VentasDelDiaPage() {
   const { usuario, tienePermiso } = useAuth()
   const queryClient = useQueryClient()
-  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos, permiteVentaACredito } =
+    useConfiguracionEmpresa()
   const [fecha, setFecha] = useState(hoyISO)
   const [articuloFiltro, setArticuloFiltro] = useState<Articulo | null>(null)
   const [idFamiliaFiltro, setIdFamiliaFiltro] = useState<number | ''>('')
@@ -308,6 +309,7 @@ export function VentasDelDiaPage() {
     const cliente = clientePorId.get(venta.idCliente)
     imprimirNotaVenta({
       nombreNegocio,
+      permiteCredito: permiteVentaACredito,
       simboloMoneda,
       id: venta.id,
       fecha: venta.fechaRegistro ?? venta.fecha,

@@ -56,7 +56,8 @@ function fechaCorta(fecha: string | null | undefined): string {
 }
 
 export function ComprasPorProveedorPage() {
-  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos, permiteCompraACredito } =
+    useConfiguracionEmpresa()
   const [proveedor, setProveedor] = useState<Proveedor | null>(null)
   const [filtros, setFiltros] = useState(filtrosAnioActual)
 
@@ -131,6 +132,7 @@ export function ComprasPorProveedorPage() {
   function imprimirNota(compra: Compra) {
     imprimirNotaCompra({
       nombreNegocio,
+      permiteCredito: permiteCompraACredito,
       simboloMoneda,
       id: compra.id,
       fecha: compra.fecha,

@@ -32,6 +32,9 @@ export interface NotaVentaData {
   total: number
   pagado: number
   porPagar: number
+  /** Si el negocio vende a crédito (Datos del negocio). Si no, el comprobante muestra solo el
+   * Total: "Pagado" y "Por pagar" no aportan nada (salvo que justo esta tenga deuda). */
+  permiteCredito: boolean
 }
 
 /** Ticket de 58mm (impresoras térmicas chicas tipo POS-58), ticket de 80mm (las de súper) u
@@ -90,6 +93,9 @@ export function imprimirNotaVenta(data: NotaVentaData, formato: FormatoImpresion
   }
 
   const money = (n: number) => formatearMonto(n, data.simboloMoneda)
+  // Negocio solo al contado: Pagado = Total y Por pagar = 0 siempre, no se imprimen. Pero si
+  // esta en particular quedó con deuda (ej. de antes de cambiar la configuración), sí.
+  const mostrarPagos = data.permiteCredito || Math.abs(data.porPagar) >= 0.01
 
   const datos = `
         <h1>${escapeHtml(data.nombreNegocio)}</h1>
@@ -138,8 +144,8 @@ export function imprimirNotaVenta(data: NotaVentaData, formato: FormatoImpresion
         </table>
         <div class="totales">
           <div><span>Total</span><span class="total-final">${money(data.total)}</span></div>
-          <div><span>Pagado</span><span>${money(data.pagado)}</span></div>
-          <div><span>Por pagar</span><span>${money(data.porPagar)}</span></div>
+          ${mostrarPagos ? `<div><span>Pagado</span><span>${money(data.pagado)}</span></div>
+          <div><span>Por pagar</span><span>${money(data.porPagar)}</span></div>` : ''}
         </div>
         ${pie}`
   } else {
@@ -161,8 +167,8 @@ export function imprimirNotaVenta(data: NotaVentaData, formato: FormatoImpresion
         ${items}
         <div class="sep"></div>
         <div class="fila total-final"><span>TOTAL</span><span>${money(data.total)}</span></div>
-        <div class="fila"><span>Pagado</span><span>${money(data.pagado)}</span></div>
-        <div class="fila"><span>Por pagar</span><span>${money(data.porPagar)}</span></div>
+        ${mostrarPagos ? `<div class="fila"><span>Pagado</span><span>${money(data.pagado)}</span></div>
+        <div class="fila"><span>Por pagar</span><span>${money(data.porPagar)}</span></div>` : ''}
         ${pie}`
   }
 

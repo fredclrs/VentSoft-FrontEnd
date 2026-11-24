@@ -47,7 +47,8 @@ import type { Cliente } from '../../types/cliente'
 import type { Venta } from '../../types/venta'
 
 export function VentasPorClientePage() {
-  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos, permiteVentaACredito } =
+    useConfiguracionEmpresa()
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [filtros, setFiltros] = useState(filtrosAnioActual)
   const [ventaParaDevolucion, setVentaParaDevolucion] = useState<Venta | null>(null)
@@ -105,6 +106,7 @@ export function VentasPorClientePage() {
   function imprimirNota(venta: Venta, formato: FormatoImpresion) {
     imprimirNotaVenta({
       nombreNegocio,
+      permiteCredito: permiteVentaACredito,
       simboloMoneda,
       id: venta.id,
       fecha: venta.fechaRegistro ?? venta.fecha,

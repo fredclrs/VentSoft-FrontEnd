@@ -34,6 +34,9 @@ export interface NotaCompraData {
   total: number
   pagado: number
   porPagar: number
+  /** Si el negocio compra a crédito (Datos del negocio). Si no, el comprobante muestra solo el
+   * Total: "Pagado" y "Por pagar" no aportan nada (salvo que justo esta tenga deuda). */
+  permiteCredito: boolean
 }
 
 /** Abre una ventana con el comprobante interno de una compra, listo para imprimir (formato de recibo angosto). */
@@ -45,6 +48,9 @@ export function imprimirNotaCompra(data: NotaCompraData) {
   }
 
   const money = (n: number) => formatearMonto(n, data.simboloMoneda)
+  // Negocio solo al contado: Pagado = Total y Por pagar = 0 siempre, no se imprimen. Pero si
+  // esta en particular quedó con deuda (ej. de antes de cambiar la configuración), sí.
+  const mostrarPagos = data.permiteCredito || Math.abs(data.porPagar) >= 0.01
 
   const filas = data.items
     .map(
@@ -106,8 +112,8 @@ export function imprimirNotaCompra(data: NotaCompraData) {
         </table>
         <div class="totales">
           <div><span>Total</span><span class="total-final">${money(data.total)}</span></div>
-          <div><span>Pagado</span><span>${money(data.pagado)}</span></div>
-          <div><span>Por pagar</span><span>${money(data.porPagar)}</span></div>
+          ${mostrarPagos ? `<div><span>Pagado</span><span>${money(data.pagado)}</span></div>
+          <div><span>Por pagar</span><span>${money(data.porPagar)}</span></div>` : ''}
         </div>
         ${data.nota ? `<div class="nota">${escapeHtml(data.nota)}</div>` : ''}
         <div class="footer">Documento interno — no válido como factura</div>

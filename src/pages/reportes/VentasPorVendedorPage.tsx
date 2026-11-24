@@ -43,7 +43,8 @@ import type { Venta } from '../../types/venta'
  * "ventas_vendedor", independiente de "ventas": deja ver el desempeño de todos sin
  * necesitar poder vender. */
 export function VentasPorVendedorPage() {
-  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos } = useConfiguracionEmpresa()
+  const { nombreNegocio, simboloMoneda, money, permiteCodigoCompartidoEntreArticulos, permiteVentaACredito } =
+    useConfiguracionEmpresa()
   const [filtros, setFiltros] = useState(filtrosAnioActual)
   const [vendedor, setVendedor] = useState<Usuario | null>(null)
 
@@ -101,6 +102,7 @@ export function VentasPorVendedorPage() {
     const cliente = clientePorId.get(venta.idCliente)
     imprimirNotaVenta({
       nombreNegocio,
+      permiteCredito: permiteVentaACredito,
       simboloMoneda,
       id: venta.id,
       fecha: venta.fechaRegistro ?? venta.fecha,

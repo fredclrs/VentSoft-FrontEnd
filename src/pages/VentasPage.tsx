@@ -361,6 +361,7 @@ export function VentasPage() {
       if (imprimirComprobante) {
         imprimirNotaVenta({
           nombreNegocio,
+          permiteCredito: permiteVentaACredito,
           simboloMoneda,
           id: venta.id,
           // fechaRegistro tiene la hora real de cuando se guardó la venta; "fecha" es solo la
