@@ -29,6 +29,7 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import MenuItem from '@mui/material/MenuItem'
 import IconButton from '@mui/material/IconButton'
+import { usePaginacion } from '../../components/Paginacion'
 import { articulosApi, buscarArticulos } from '../../api/articulos'
 import { familiasApi } from '../../api/familias'
 import { usuariosApi } from '../../api/usuarios'
@@ -87,8 +88,9 @@ export function VentasDelDiaPage() {
   // Endpoint propio (no reusa el historial "por cliente"): así el permiso "ventas_dia" queda
   // realmente separado del permiso "ventas" en el backend, no solo escondido en el menú.
   const ventasQuery = useQuery({ queryKey: ['ventas', 'delDia', fecha], queryFn: () => getVentasDelDia(fecha) })
+  // La última venta arriba (lo que se busca casi siempre es lo recién vendido).
   const ventasDelDia = useMemo(
-    () => [...(ventasQuery.data ?? [])].sort((a, b) => a.id - b.id),
+    () => [...(ventasQuery.data ?? [])].sort((a, b) => b.id - a.id),
     [ventasQuery.data],
   )
   // Las anuladas se siguen mostrando (tachadas, para que el dueño las vea), pero no cuentan
@@ -215,6 +217,11 @@ export function VentasDelDiaPage() {
       .map((v) => ({ venta: v, detalles: v.detalles.filter(pasaFiltro) }))
       .filter((v) => v.detalles.length > 0)
   }, [ventasDelDia, hayFiltroProducto, articuloFiltro, idFamiliaFiltro, articuloPorId])
+
+  const { visibles: ventasDeLaPagina, paginador } = usePaginacion(
+    ventasVisibles,
+    `${fecha}|${articuloFiltro?.id ?? ''}|${idFamiliaFiltro ?? ''}`,
+  )
 
   // Resumen puntual del artículo/familia filtrado — aparte del resumen general del día, que
   // sigue reflejando TODO lo vendido sin importar el filtro.
@@ -354,7 +361,10 @@ export function VentasDelDiaPage() {
         { label: 'P. unit.', align: 'right' },
         { label: 'Subtotal', align: 'right' },
       ],
-      grupos: ventasVisibles.filter(({ venta }) => venta.estado !== 'AN').map(({ venta: v, detalles }) => ({
+      grupos: ventasVisibles
+        .filter(({ venta }) => venta.estado !== 'AN')
+        .sort((a, b) => a.venta.id - b.venta.id)
+        .map(({ venta: v, detalles }) => ({
         encabezado: `Venta #${v.id} · Cliente: ${clientePorId.get(v.idCliente)?.nombre ?? `#${v.idCliente}`}`,
         subencabezado: v.referencias ? `Ref: ${v.referencias}` : undefined,
         filas: detalles.map((d) => [
@@ -681,7 +691,7 @@ export function VentasDelDiaPage() {
             </Stack>
           )}
 
-          {ventasVisibles.map(({ venta, detalles }) => (
+          {ventasDeLaPagina.map(({ venta, detalles }) => (
             <Accordion key={venta.id} variant="outlined" disableGutters>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Stack
@@ -798,6 +808,8 @@ export function VentasDelDiaPage() {
               </AccordionDetails>
             </Accordion>
           ))}
+
+          {paginador}
         </>
       )}
 

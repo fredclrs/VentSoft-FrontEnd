@@ -29,6 +29,7 @@ import { HistorialDevolucionesVenta } from '../../components/HistorialDevolucion
 import { BotonImprimirNota } from '../../components/BotonImprimirNota'
 import { FiltroFechaNumero } from '../../components/reportes/FiltroFechaNumero'
 import { buscarClientesTexto } from '../../api/clientes'
+import { usePaginacion } from '../../components/Paginacion'
 import { articulosApi } from '../../api/articulos'
 import { usuariosApi } from '../../api/usuarios'
 import { temporadasApi } from '../../api/temporadas'
@@ -85,8 +86,13 @@ export function VentasPorClientePage() {
   const temporadasQuery = useQuery({ queryKey: ['temporadas'], queryFn: () => temporadasApi.search() })
 
   const ventasFiltradas = useMemo(
-    () => filtrarPorFechaYNumero(ventasQuery.data ?? [], filtros, temporadasQuery.data ?? []),
+    // La última venta arriba.
+    () => [...filtrarPorFechaYNumero(ventasQuery.data ?? [], filtros, temporadasQuery.data ?? [])].sort((a, b) => b.id - a.id),
     [ventasQuery.data, filtros, temporadasQuery.data],
+  )
+  const { visibles: ventasDeLaPagina, paginador } = usePaginacion(
+    ventasFiltradas,
+    `${cliente?.id ?? ''}|${JSON.stringify(filtros)}`,
   )
 
   // Para mostrar código en el detalle (los renglones solo traen idArticulo) y el
@@ -130,7 +136,8 @@ export function VentasPorClientePage() {
 
   function imprimirListadoVentas() {
     // El extracto es para entregarle al cliente: las anuladas no van (nunca fueron una venta).
-    const ventasDelExtracto = ventasFiltradas.filter((v) => v.estado !== 'AN')
+    // En orden de fecha (de la más vieja a la más nueva), como un extracto normal.
+    const ventasDelExtracto = ventasFiltradas.filter((v) => v.estado !== 'AN').sort((a, b) => a.id - b.id)
     const totalGeneral = ventasDelExtracto.reduce((acc, v) => acc + v.total, 0)
     const totalPagado = ventasDelExtracto.reduce((acc, v) => acc + v.pagado, 0)
     const totalPorPagar = ventasDelExtracto.reduce((acc, v) => acc + v.porPagar, 0)
@@ -281,7 +288,7 @@ export function VentasPorClientePage() {
             </Stack>
           )}
 
-          {ventasFiltradas.map((venta) => (
+          {ventasDeLaPagina.map((venta) => (
             <Accordion key={venta.id} variant="outlined" disableGutters>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Stack
@@ -396,6 +403,8 @@ export function VentasPorClientePage() {
               </AccordionDetails>
             </Accordion>
           ))}
+
+          {paginador}
         </>
       )}
 
