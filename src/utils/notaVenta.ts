@@ -48,7 +48,7 @@ function estilosTicket(anchoPapelMm: number, anchoUtilMm: number, fuentePx: numb
   html, body { margin: 0; padding: 0; background: #fff; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: ${fuentePx}px; color: #000;
          width: ${anchoUtilMm}mm; margin: 0; padding: 1mm 0 4mm; line-height: 1.25; }
-  h1 { font-size: ${fuentePx + 4}px; margin: 0 0 2px; text-align: center; }
+  h1 { font-size: ${fuentePx + 3}px; margin: 0 0 2px; text-align: center; }
   .sub { text-align: center; margin-bottom: 6px; }
   .datos div { margin-bottom: 1px; overflow-wrap: anywhere; }
   .sep { border-top: 1px dashed #000; margin: 5px 0; }
@@ -56,7 +56,7 @@ function estilosTicket(anchoPapelMm: number, anchoUtilMm: number, fuentePx: numb
   .item .desc { font-weight: 700; overflow-wrap: anywhere; }
   .fila { display: flex; justify-content: space-between; gap: 4px; }
   .fila span:last-child { text-align: right; white-space: nowrap; }
-  .total-final { font-size: ${fuentePx + 3}px; font-weight: 700; }
+  .total-final { font-size: ${fuentePx + 2}px; font-weight: 700; }
   .nota { margin-top: 6px; font-style: italic; overflow-wrap: anywhere; }
   .footer { margin-top: 10px; text-align: center; }
 `
@@ -145,7 +145,7 @@ export function imprimirNotaVenta(data: NotaVentaData, formato: FormatoImpresion
   } else {
     // En papel angosto no entran 5 columnas: cada artículo va en dos renglones
     // (descripción arriba; "cantidad x precio" y el subtotal abajo, a la derecha).
-    estilos = formato === 'ticket58' ? estilosTicket(58, 48, 11) : estilosTicket(80, 72, 12)
+    estilos = formato === 'ticket58' ? estilosTicket(58, 44, 9) : estilosTicket(80, 70, 11)
     const items = data.items
       .map(
         (item) => `
