@@ -134,6 +134,13 @@ export function ComprasPage() {
 
   // Solo para resolver código/descripción al agregar por escaneo; no es historial.
   const articulosQuery = useQuery({ queryKey: ['articulos'], queryFn: () => articulosApi.search() })
+
+  /** Nombre del artículo para los avisos de precio después de guardar (que del backend solo
+   * traen el id y el código): "código — descripción (variante)", así se sabe qué producto es. */
+  function nombreArticulo(idArticulo: number, codigo: string): string {
+    const a = (articulosQuery.data ?? []).find((x) => x.id === idArticulo)
+    return a ? etiquetaArticulo(a, permiteCodigoCompartidoEntreArticulos) : codigo
+  }
   // Solo hace falta si la IA encuentra productos nuevos en la factura (para elegirles Familia).
   const familiasQuery = useQuery({ queryKey: ['familias'], queryFn: () => familiasApi.search() })
   // Catálogo de atributos del negocio (talla/color en indumentaria, u otros según el rubro) —
@@ -866,7 +873,7 @@ export function ComprasPage() {
           setPreciosAceptados({})
           setPreciosEditados({})
         }}
-        maxWidth="xs"
+        maxWidth="sm"
         fullWidth
       >
         <DialogTitle>Precios sugeridos por margen de ganancia</DialogTitle>
@@ -888,9 +895,16 @@ export function ComprasPage() {
                     setPreciosAceptados((prev) => ({ ...prev, [p.idArticulo]: e.target.checked }))
                   }
                 />
-                <Typography variant="body2" sx={{ flexGrow: 1 }}>
-                  {p.codigo}
-                </Typography>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {nombreArticulo(p.idArticulo, p.codigo)}
+                  </Typography>
+                  {p.costoAnterior != null && p.costoNuevo != null && (
+                    <Typography variant="caption" color="text.secondary">
+                      Costo: {money(p.costoAnterior)} → {money(p.costoNuevo)}
+                    </Typography>
+                  )}
+                </Box>
                 <Typography variant="caption" color="text.secondary">
                   {money(p.precioActual)} →
                 </Typography>
@@ -937,7 +951,7 @@ export function ComprasPage() {
             {(avisosSinMargen ?? []).map((a) => (
               <Stack key={a.idArticulo} spacing={0}>
                 <Typography variant="body2">
-                  <strong>{a.codigo}</strong> — Precio de venta actual: {money(a.precioActual)}
+                  <strong>{nombreArticulo(a.idArticulo, a.codigo)}</strong> — Precio de venta actual: {money(a.precioActual)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   Costo: {money(a.costoAnterior)} → {money(a.costoNuevo)}

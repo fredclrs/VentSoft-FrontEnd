@@ -17,6 +17,9 @@ export interface PrecioSugerido {
   codigo: string
   precioActual: number
   precioSugerido: number
+  /** Costo por paquete antes y después de la compra (para mostrar por qué cambia el precio). */
+  costoAnterior?: number
+  costoNuevo?: number
 }
 
 /** Un artículo SIN margen de ganancia configurado cuyo costo subió al registrar la compra — el
