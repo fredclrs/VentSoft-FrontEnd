@@ -24,6 +24,7 @@ export function useConfiguracionEmpresa() {
   const permiteCodigoCompartidoEntreArticulos = query.data?.permiteCodigoCompartidoEntreArticulos ?? false
   const clientePorDefecto = query.data?.clientePorDefecto ?? null
   const proveedorPorDefecto = query.data?.proveedorPorDefecto ?? null
+  const formatoTicket = query.data?.formatoTicket ?? 'ticket80'
   const tieneClaveApiIA = query.data?.tieneClaveApiIA ?? false
   return {
     ...query,
@@ -36,6 +37,7 @@ export function useConfiguracionEmpresa() {
     clientePorDefecto,
     proveedorPorDefecto,
     tieneClaveApiIA,
+    formatoTicket,
     money: (n: number) => formatearMonto(n, simboloMoneda),
   }
 }

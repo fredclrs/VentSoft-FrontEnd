@@ -10,6 +10,7 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import Link from '@mui/material/Link'
+import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
@@ -26,6 +27,7 @@ import { getErrorMessage } from '../api/errors'
 import { CONFIGURACION_EMPRESA_QUERY_KEY, useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import type { Cliente } from '../types/cliente'
 import type { Proveedor } from '../types/proveedor'
+import type { FormatoImpresion } from '../utils/notaVenta'
 
 export function ConfiguracionEmpresaPage() {
   const queryClient = useQueryClient()
@@ -36,6 +38,7 @@ export function ConfiguracionEmpresaPage() {
   const [permiteCompraACredito, setPermiteCompraACredito] = useState(true)
   const [redondearPreciosEnteros, setRedondearPreciosEnteros] = useState(false)
   const [permiteCodigoCompartidoEntreArticulos, setPermiteCodigoCompartidoEntreArticulos] = useState(false)
+  const [formatoTicket, setFormatoTicket] = useState<FormatoImpresion>('ticket80')
   const [clientePorDefecto, setClientePorDefecto] = useState<Cliente | null>(null)
   const [proveedorPorDefecto, setProveedorPorDefecto] = useState<Proveedor | null>(null)
   // La clave de IA nunca se precarga (el backend no la devuelve, ver ConfiguracionEmpresa.tsx) —
@@ -55,6 +58,7 @@ export function ConfiguracionEmpresaPage() {
       setPermiteCompraACredito(configuracionQuery.data.permiteCompraACredito)
       setRedondearPreciosEnteros(configuracionQuery.data.redondearPreciosEnteros)
       setPermiteCodigoCompartidoEntreArticulos(configuracionQuery.data.permiteCodigoCompartidoEntreArticulos)
+      setFormatoTicket(configuracionQuery.data.formatoTicket ?? 'ticket80')
       setClientePorDefecto(configuracionQuery.data.clientePorDefecto ?? null)
       setProveedorPorDefecto(configuracionQuery.data.proveedorPorDefecto ?? null)
     }
@@ -84,6 +88,7 @@ export function ConfiguracionEmpresaPage() {
       permiteCompraACredito,
       redondearPreciosEnteros,
       permiteCodigoCompartidoEntreArticulos,
+      formatoTicket,
       idClientePorDefecto: clientePorDefecto?.id ?? null,
       idProveedorPorDefecto: proveedorPorDefecto?.id ?? null,
     }
@@ -226,6 +231,27 @@ export function ConfiguracionEmpresaPage() {
                 {permiteCodigoCompartidoEntreArticulos
                   ? 'Para cuando el proveedor imprime un solo código para varias variantes de un mismo producto (ej. distintas tallas/colores de una prenda, o distintos tintes de una pintura) en vez de uno por variante. Al escanear un código con varias coincidencias, se elige cuál es.'
                   : 'El código de barras tiene que ser único por artículo, como es lo normal en la mayoría de los rubros.'}
+              </Typography>
+            </div>
+
+            <div>
+              <TextField
+                select
+                label="Papel del comprobante de venta"
+                value={formatoTicket}
+                onChange={(e) => {
+                  setFormatoTicket(e.target.value as FormatoImpresion)
+                  setGuardadoOk(false)
+                }}
+                sx={{ minWidth: 300 }}
+              >
+                <MenuItem value="ticket58">Ticket 58 mm (térmica chica, POS-58)</MenuItem>
+                <MenuItem value="ticket80">Ticket 80 mm (térmica grande, tipo súper)</MenuItem>
+                <MenuItem value="hoja">Hoja completa (A4/Carta, impresora normal)</MenuItem>
+              </TextField>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Es el tamaño con el que Ventas imprime el comprobante al vender. Elegí el que
+                corresponda al papel de la impresora del negocio.
               </Typography>
             </div>
 

@@ -83,6 +83,8 @@ export function VentasPage() {
     permiteVentaACredito,
     permiteCodigoCompartidoEntreArticulos,
     clientePorDefecto,
+    // Tamaño de papel del comprobante: se configura en Administración → Datos del negocio.
+    formatoTicket,
   } = useConfiguracionEmpresa()
 
   const [cliente, setCliente] = useState<Cliente | null>(null)
@@ -98,7 +100,12 @@ export function VentasPage() {
   const [recibido, setRecibido] = useState('')
   const [contado, setContado] = useState(false)
   const [imprimirComprobante, setImprimirComprobante] = useState(true)
-  const [formatoImpresion, setFormatoImpresion] = useState<FormatoImpresion>('ticket')
+  // Arranca con el formato configurado en Datos del negocio (y se acomoda cuando la
+  // configuración termina de cargar); se puede cambiar acá para una venta puntual.
+  const [formatoImpresion, setFormatoImpresion] = useState<FormatoImpresion>(formatoTicket)
+  useEffect(() => {
+    setFormatoImpresion(formatoTicket)
+  }, [formatoTicket])
   const [lineas, setLineas] = useState<LineaVenta[]>([])
   const [articuloParaAgregar, setArticuloParaAgregar] = useState<Articulo | null>(null)
   const [modoParaAgregar, setModoParaAgregar] = useState<ModoVentaCompra>('caja')
@@ -722,9 +729,10 @@ export function VentasPage() {
             label="Formato"
             value={formatoImpresion}
             onChange={(e) => setFormatoImpresion(e.target.value as FormatoImpresion)}
-            sx={{ width: 200 }}
+            sx={{ width: 220 }}
           >
-            <MenuItem value="ticket">Ticket angosto (térmica)</MenuItem>
+            <MenuItem value="ticket58">Ticket 58 mm (térmica chica)</MenuItem>
+            <MenuItem value="ticket80">Ticket 80 mm (térmica grande)</MenuItem>
             <MenuItem value="hoja">Hoja completa (A4/Carta)</MenuItem>
           </TextField>
         )}

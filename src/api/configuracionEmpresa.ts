@@ -1,3 +1,4 @@
+import type { FormatoImpresion } from '../utils/notaVenta'
 import { apiClient } from './client'
 import { unwrap } from './crud'
 import type { BaseResponse } from '../types/baseResponse'
@@ -15,6 +16,7 @@ export interface ActualizarConfiguracionEmpresaInput {
   permiteCompraACredito: boolean
   redondearPreciosEnteros: boolean
   permiteCodigoCompartidoEntreArticulos: boolean
+  formatoTicket: FormatoImpresion
   /** Solo mandar si se está cargando o reemplazando la clave — dejar sin mandar (undefined) para
    * no tocar la que ya estaba guardada (nunca se la devolvemos, así que no hay forma de
    * "reenviarla sin querer"). */

@@ -8,6 +8,7 @@ import ListItemText from '@mui/material/ListItemText'
 import PrintIcon from '@mui/icons-material/PrintOutlined'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLongOutlined'
 import DescriptionIcon from '@mui/icons-material/DescriptionOutlined'
+import { useConfiguracionEmpresa } from '../hooks/useConfiguracionEmpresa'
 import type { FormatoImpresion } from '../utils/notaVenta'
 
 interface BotonImprimirNotaProps {
@@ -30,6 +31,9 @@ export function BotonImprimirNota({
 }: BotonImprimirNotaProps) {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
 
+  // Se marca el formato configurado en Datos del negocio (igual se puede elegir otro).
+  const { formatoTicket: ultimo } = useConfiguracionEmpresa()
+
   function elegir(formato: FormatoImpresion) {
     setAnchorEl(null)
     onImprimir(formato)
@@ -47,13 +51,19 @@ export function BotonImprimirNota({
         {label}
       </Button>
       <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={() => setAnchorEl(null)}>
-        <MenuItem onClick={() => elegir('ticket')}>
+        <MenuItem selected={ultimo === 'ticket58'} onClick={() => elegir('ticket58')}>
           <ListItemIcon>
             <ReceiptLongIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Ticket angosto" secondary="Impresora térmica (tipo súper)" />
+          <ListItemText primary="Ticket 58 mm" secondary="Térmica chica (POS-58)" />
         </MenuItem>
-        <MenuItem onClick={() => elegir('hoja')}>
+        <MenuItem selected={ultimo === 'ticket80'} onClick={() => elegir('ticket80')}>
+          <ListItemIcon>
+            <ReceiptLongIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Ticket 80 mm" secondary="Térmica grande (tipo súper)" />
+        </MenuItem>
+        <MenuItem selected={ultimo === 'hoja'} onClick={() => elegir('hoja')}>
           <ListItemIcon>
             <DescriptionIcon fontSize="small" />
           </ListItemIcon>
